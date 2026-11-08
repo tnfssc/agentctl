@@ -16,3 +16,14 @@ Agreed with the user 2026-11-09.
   shells must source env.sh; agentctl never edits shell rc files.
 - Surfaces: `agentctl tune <agent>` (multiselect, `--yes`, `--reset`, `--dry-run`) and a Tune dialog in the
   dashboard; both review the diff before writing.
+
+## Agent instructions (behavior)
+
+- Separate target `instructions` (dashboard sidebar "Behavior", `agentctl tune instructions`). Every item is a marked
+  section (`<!-- agentctl:<id> -->` … `<!-- /agentctl:<id> -->`) in `~/.agents/AGENTS.md`; text outside markers is the
+  user's. Reset removes the section; a changed section text in a newer release counts as not applied and is replaced.
+- Applying links `~/.claude/CLAUDE.md` and `$CODEX_HOME/AGENTS.md` to that file when they don't exist; an existing
+  separate file is left alone with a note.
+- Items chosen with the user (generic, from their Mac and minipc files): judgment, shared tools, link every PR/ticket,
+  working style, project notes, terse replies. Dropped: Git/PR habits beyond linking, Playwright UI checks, anything
+  Writer-, gcloud-, kubectl- or machine-specific.

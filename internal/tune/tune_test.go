@@ -191,3 +191,41 @@ enabled = false
 		t.Fatalf("reset should restore the original file, got:\n%s", got)
 	}
 }
+
+func TestInstructionsSectionsAndLinks(t *testing.T) {
+	home := testutil.Home(t)
+	path := filepath.Join(home, ".agents", "AGENTS.md")
+	mine := "# My rules\n\nUse tabs.\n"
+	write(t, path, mine)
+	codexLink := filepath.Join(home, ".codex", "AGENTS.md")
+	write(t, codexLink, "codex has its own file\n")
+
+	statuses, err := Inspect(Instructions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses[0].Notes) != 1 || !strings.Contains(statuses[0].Notes[0], codexLink) {
+		t.Fatalf("want a note about the separate Codex file, got %v", statuses[0].Notes)
+	}
+	run(t, Instructions, Recommended(statuses))
+
+	got, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(got), mine) || !strings.Contains(string(got), "<!-- agentctl:judgment -->") ||
+		!strings.Contains(string(got), "`<repo>/.agents/notes/") {
+		t.Fatalf("instructions file:\n%s", got)
+	}
+	if target, err := os.Readlink(filepath.Join(home, ".claude", "CLAUDE.md")); err != nil || target != path {
+		t.Fatalf("Claude Code should be linked to %s: %q %v", path, target, err)
+	}
+	if b, _ := os.ReadFile(codexLink); string(b) != "codex has its own file\n" {
+		t.Fatal("an existing agent file must be left alone")
+	}
+	if st, _ := Inspect(Instructions); !st[0].Applied {
+		t.Fatal("applied sections should read as applied")
+	}
+
+	run(t, Instructions, nil)
+	if got, _ := os.ReadFile(path); string(got) != mine {
+		t.Fatalf("reset should leave only the user's text, got:\n%s", got)
+	}
+}

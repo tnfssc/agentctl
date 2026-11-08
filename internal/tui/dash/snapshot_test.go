@@ -42,7 +42,7 @@ func TestSnapshots(t *testing.T) {
 	hover.hover = "switch:claude"
 	frames["hover"] = hover
 	selected := m
-	selected.focus = 2
+	selected.focus = 3
 	frames["selected-proxy"] = selected
 	routed := send(t, m, loadedMsg{cfg: m.cfg, st: m.st, statuses: []agentStatus{
 		m.statuses[0], {agent: m.statuses[1].agent, status: app.Status{Route: "spark", URL: "https://spark.example:8445", Model: "gpt-6.1-sol"}},

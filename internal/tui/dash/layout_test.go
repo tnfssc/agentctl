@@ -94,7 +94,7 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		mr := send(t, m, routed)
 
 		var states []state
-		for focus := range 4 {
+		for focus := range 5 {
 			for _, base := range []state{{"local", m}, {"routed", mr}} {
 				s := base.m
 				s.focus = focus
@@ -110,11 +110,11 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		states = append(states, state{"busy", busy}, state{"toast", toast})
 
 		sameRects(t, states,
-			"pill", "status", "hints", "nav:agent:claude", "nav:agent:codex", "nav:proxy:spark", "nav:add",
+			"pill", "status", "hints", "nav:agent:claude", "nav:agent:codex", "nav:behavior", "nav:proxy:spark", "nav:add",
 			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "add", "testall", "refresh", "quit")
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
-			{"switch:claude", "switch:codex", "test:spark", "add-btn"},
+			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions"},
 			{"local:codex", "details:spark"},
 			{"tune:claude", "tune:codex", "rm:spark"},
 		} {
@@ -309,7 +309,7 @@ func TestMultilineTextStaysOneRow(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = multi, true
 		down := send(t, m, probedMsg{name: "spark", probe: app.Probe{HealthErr: errors.New(multi)}})
-		down.focus = 2
+		down.focus = 3
 		form, _ := m.openAdd()
 		withErr := send(t, form.(Model), savedMsg{name: "x", err: errors.New(multi)})
 		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}})

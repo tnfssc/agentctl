@@ -172,3 +172,13 @@ func TestTune(t *testing.T) {
 		t.Fatalf("tuning must not count as acknowledging the proxy warning: %+v %v", st, err)
 	}
 }
+
+func TestTuneInstructions(t *testing.T) {
+	home, _ := setup(t)
+	must(t, "tune", "instructions", "--yes")
+	got, err := os.ReadFile(filepath.Join(home, ".agents", "AGENTS.md"))
+	if err != nil || !strings.Contains(string(got), "## Judgment") {
+		t.Fatalf("instructions: %v\n%s", err, got)
+	}
+	must(t, "tune", "instructions", "--reset", "--yes")
+}

@@ -15,20 +15,25 @@ import (
 func newTuneCmd() *cobra.Command {
 	var yes, dryRun, reset bool
 	cmd := &cobra.Command{
-		Use:   "tune <claude|codex>",
+		Use:   "tune <claude|codex|instructions>",
 		Short: "Apply agentctl's curated settings, or reset them",
-		Long: "Pick curated settings for Claude Code or Codex: fewer unused tools, no background spend,\n" +
-			"privacy without losing features. Unticking an item resets it to the agent's default.",
+		Long: "Pick curated settings for Claude Code or Codex (fewer unused tools, no background spend, privacy\n" +
+			"without losing features), or curated agent instructions, written to ~/.agents/AGENTS.md and linked\n" +
+			"for both agents. Unticking an item resets it to the default.",
 		Example: `  agentctl tune claude             # pick interactively
   agentctl tune codex --yes        # apply the recommended set
+  agentctl tune instructions       # shared behavior for every agent
   agentctl tune claude --reset     # undo every curated setting`,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: app.AgentNames(),
+		ValidArgs: append(app.AgentNames(), tune.Instructions),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			u := newUI(cmd)
-			a, err := app.FindAgent(args[0])
-			if err != nil {
-				return err
+			a := app.Agent{Name: tune.Instructions, Title: tune.InstructionsTitle}
+			if args[0] != tune.Instructions {
+				var err error
+				if a, err = app.FindAgent(args[0]); err != nil {
+					return err
+				}
 			}
 			statuses, err := tune.Inspect(a.Name)
 			if err != nil {

@@ -28,7 +28,12 @@ type Change struct {
 	After  []byte
 	Perm   fs.FileMode // used only when creating the file
 	Quiet  bool        // generated file; summarized instead of diffed
+	// Link, when set, makes Path a symlink to Link instead of writing it.
+	// Path must not exist yet.
+	Link string
 }
+
+func (c Change) noop() bool { return c.Link == "" && bytes.Equal(c.Before, c.After) }
 
 // Plan is everything one `use` would do to an agent, shown before applying.
 type Plan struct {
@@ -41,7 +46,7 @@ type Plan struct {
 // Empty reports whether applying the plan would change nothing.
 func (p Plan) Empty() bool {
 	for _, c := range p.Changes {
-		if !bytes.Equal(c.Before, c.After) {
+		if !c.noop() {
 			return false
 		}
 	}
@@ -52,7 +57,11 @@ func (p Plan) Empty() bool {
 func (p Plan) Diff() string {
 	var b strings.Builder
 	for _, c := range p.Changes {
-		if bytes.Equal(c.Before, c.After) {
+		if c.noop() {
+			continue
+		}
+		if c.Link != "" {
+			fmt.Fprintf(&b, "link %s -> %s\n", c.Path, c.Link)
 			continue
 		}
 		if c.Quiet {
@@ -67,7 +76,16 @@ func (p Plan) Diff() string {
 // Apply backs up each existing file, then writes the new contents.
 func (p Plan) Apply() error {
 	for _, c := range p.Changes {
-		if bytes.Equal(c.Before, c.After) {
+		if c.noop() {
+			continue
+		}
+		if c.Link != "" {
+			if err := os.MkdirAll(filepath.Dir(c.Path), 0o700); err != nil {
+				return err
+			}
+			if err := os.Symlink(c.Link, c.Path); err != nil {
+				return err
+			}
 			continue
 		}
 		if c.Before != nil {

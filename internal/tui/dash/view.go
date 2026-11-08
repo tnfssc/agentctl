@@ -15,6 +15,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/codex"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
+	"github.com/tnfssc/agentctl/internal/tune"
 )
 
 // Layout. Everything is placed on a fixed grid computed from the terminal
@@ -240,7 +241,7 @@ func (m Model) proxyWindow(listTop, bottom int) (first, rows int) {
 	if len(names) <= rows {
 		return 0, rows
 	}
-	sel := m.focus - len(m.statuses)
+	sel := m.focus - len(m.statuses) - 1 // agents, then the behavior row
 	first = max(0, min(sel-rows+1, len(names)-rows))
 	return first, rows
 }
@@ -268,6 +269,9 @@ func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
 		y++
 	}
 	y++
+	sc.add(p.Label("Behavior"), 3, y, 1, "")
+	row(y+2, "behavior", "◇", "Instructions", 11, "all agents")
+	y += 4
 	names := m.cfg.Names()
 	first, rows := m.proxyWindow(y+2, bottom)
 	label := p.Label("Proxies")
@@ -337,6 +341,16 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.agentDetail(p, m.statusOf(name))
 	case "proxy":
 		return m.proxyDetail(p, name)
+	case "behavior":
+		path, _ := tune.InstructionsPath()
+		d := detailView{
+			label:   "Behavior · all agents",
+			heading: "Shared agent instructions",
+			body:    "Curated sections of " + tildePath(path) + ", which Claude Code and Codex both read. Your own text there stays untouched.",
+			buttons: [3]button{{"Tune", "tune:" + tune.Instructions, true}},
+		}
+		d.facts[1] = fact(p, "file", tildePath(path))
+		return d
 	}
 	return detailView{
 		label:   "Proxy · new",

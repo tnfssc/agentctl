@@ -8,9 +8,10 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/codex"
 )
 
-// Op is one setting an item manages. Exactly one of Value, Drop, Entry or
-// Env is used.
+// Op is one setting an item manages. Exactly one of Value, Drop, Entry,
+// Env or Block is used.
 type Op struct {
+	Block string // a marked section, with Value as its text, in an instructions file
 	Path  string // dotted settings path
 	Value any    // set Path to this
 	Drop  bool   // remove Path (reset leaves it removed)
@@ -133,6 +134,8 @@ func Items(agentName string) []Item {
 		return claudeItems
 	case codex.Name:
 		return codexItems
+	case Instructions:
+		return instructionItems
 	}
 	return nil
 }

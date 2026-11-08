@@ -76,6 +76,14 @@ func open(agentName string) (*session, error) {
 			return nil, fmt.Errorf("%s: %w", s.path, err)
 		}
 		s.doc = &tomlDoc{src: s.before}
+	case Instructions:
+		if s.path, err = InstructionsPath(); err != nil {
+			return nil, err
+		}
+		if s.before, err = agent.ReadFile(s.path); err != nil {
+			return nil, err
+		}
+		s.doc = &mdDoc{src: s.before}
 	default:
 		return nil, fmt.Errorf("unknown agent %q", agentName)
 	}
@@ -117,6 +125,13 @@ func Inspect(agentName string) ([]Status, error) {
 			}
 		}
 		out[i] = st
+	}
+	if agentName == Instructions && len(out) > 0 {
+		_, notes, err := linkChanges(s.path)
+		if err != nil {
+			return nil, err
+		}
+		out[0].Notes = append(out[0].Notes, notes...)
 	}
 	return out, nil
 }
@@ -173,7 +188,113 @@ func Plan(agentName string, want map[string]bool) (agent.Plan, error) {
 	shellChanges, notes := s.shell.changes()
 	plan.Changes = append(plan.Changes, shellChanges...)
 	plan.Warnings = append(plan.Warnings, notes...)
+	if s.agent == Instructions && len(bytes.TrimSpace(after)) > 0 {
+		links, notes, err := linkChanges(s.path)
+		if err != nil {
+			return agent.Plan{}, err
+		}
+		plan.Changes = append(plan.Changes, links...)
+		plan.Warnings = append(plan.Warnings, notes...)
+	}
 	return plan, nil
+}
+
+// linkChanges links each agent's global instructions file to path when it
+// doesn't exist yet. A file that exists and isn't that link is the user's;
+// it is left alone with a note.
+func linkChanges(path string) ([]agent.Change, []string, error) {
+	links, err := instructionLinks()
+	if err != nil {
+		return nil, nil, err
+	}
+	var (
+		changes []agent.Change
+		notes   []string
+	)
+	for _, l := range links {
+		target, err := os.Readlink(l)
+		switch {
+		case err == nil && target == path:
+		case errors.Is(err, os.ErrNotExist):
+			changes = append(changes, agent.Change{Path: l, Link: path})
+		default:
+			notes = append(notes, fmt.Sprintf("%s is a separate file, so that agent won't read %s; "+
+				"move its contents there and replace it with a link", l, path))
+		}
+	}
+	return changes, notes, nil
+}
+
+// Markdown (global instructions) ------------------------------------------
+
+// mdDoc manages marked sections of a markdown file. Text outside the
+// markers is the user's and is never touched.
+type mdDoc struct{ src []byte }
+
+func (d *mdDoc) bytes() []byte { return d.src }
+
+func markers(id string) (string, string) {
+	return "<!-- agentctl:" + id + " -->", "<!-- /agentctl:" + id + " -->"
+}
+
+func (d *mdDoc) block(op Op) string {
+	begin, end := markers(op.Block)
+	text, _ := op.Value.(string)
+	return begin + "\n" + text + "\n" + end + "\n"
+}
+
+// span finds an existing section, including its trailing newline.
+func (d *mdDoc) span(id string) (int, int, bool) {
+	begin, end := markers(id)
+	s := string(d.src)
+	i := strings.Index(s, begin)
+	if i < 0 {
+		return 0, 0, false
+	}
+	j := strings.Index(s[i:], end)
+	if j < 0 {
+		return 0, 0, false
+	}
+	j += i + len(end)
+	if j < len(s) && s[j] == '\n' {
+		j++
+	}
+	return i, j, true
+}
+
+func (d *mdDoc) holds(op Op) bool {
+	i, j, ok := d.span(op.Block)
+	return ok && string(d.src[i:j]) == d.block(op)
+}
+
+func (d *mdDoc) apply(op Op) error {
+	if op.Block == "" {
+		return errors.New("instructions only hold sections")
+	}
+	if i, j, ok := d.span(op.Block); ok {
+		d.src = []byte(string(d.src[:i]) + d.block(op) + string(d.src[j:]))
+		return nil
+	}
+	s := strings.TrimRight(string(d.src), "\n")
+	if s == "" {
+		s = "# Agent instructions"
+	}
+	d.src = []byte(s + "\n\n" + d.block(op))
+	return nil
+}
+
+// reset removes the section and the blank line apply put before it.
+func (d *mdDoc) reset(op Op) error {
+	i, j, ok := d.span(op.Block)
+	if !ok {
+		return nil
+	}
+	s := string(d.src)
+	if strings.HasSuffix(s[:i], "\n\n") {
+		i--
+	}
+	d.src = []byte(s[:i] + s[j:])
+	return nil
 }
 
 // JSON (Claude Code settings.json) ---------------------------------------

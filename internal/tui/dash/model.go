@@ -289,6 +289,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
+	ids = append(ids, "behavior")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -348,6 +349,8 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		m.req = app.Request{Agent: arg, Route: agent.Local}
 		m.busy = "Planning"
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
+	case "behavior":
+		return m.act("tune:" + tune.Instructions)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
 	case "proxy", "details":
@@ -763,6 +766,9 @@ func (m Model) usedBy(name string) string {
 }
 
 func title(agentName string) string {
+	if agentName == tune.Instructions {
+		return tune.InstructionsTitle
+	}
 	if a, err := app.FindAgent(agentName); err == nil {
 		return a.Title
 	}
