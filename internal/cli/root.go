@@ -1,4 +1,4 @@
-// Package cli wires the cliproxy command tree.
+// Package cli wires the agentctl command tree.
 package cli
 
 import (
@@ -28,17 +28,25 @@ func Execute(ctx context.Context) error {
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "cliproxy",
-		Short: "A terminal front end for cliproxy",
-		Long:  "cliproxy is a terminal front end for cliproxy.\n\nThe real commands are still to come; try the demo to see the UI stack.",
-		Example: `  # Play the animated demo
-  cliproxy demo
-
-  # Play it at double speed
-  cliproxy demo --speed 2`,
+		Use:   "agentctl",
+		Short: "Switch coding agents between their own login and CLIProxyAPI servers",
+		Long: "agentctl routes Claude Code and Codex either to their own login or to a CLIProxyAPI server,\n" +
+			"by editing the agents' own config files. Claude models are only ever offered to Claude Code.",
+		Example: `  agentctl proxy add spark --url https://spark.example.ts.net:8445
+  agentctl proxy test
+  agentctl use codex spark
+  agentctl use claude local
+  agentctl status`,
 		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			u := newUI(cmd)
+			if u.interactive() {
+				return runInteractive(cmd.Context(), u)
+			}
+			return printStatus(u)
+		},
 	}
-	root.AddCommand(newDemoCmd())
+	root.AddCommand(newProxyCmd(), newUseCmd(), newStatusCmd(), newTokenCmd())
 	return root
 }
 

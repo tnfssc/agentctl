@@ -14,6 +14,11 @@ linters:
     - gosec
     - bidichk
     - noctx
+  settings:
+    gosec:
+      excludes:
+        - G101 # flags env var *names* like ANTHROPIC_AUTH_TOKEN as credentials
+        - G304 # every file we read is a config path we computed, by design
   exclusions:
     presets: [std-error-handling]
     rules:
@@ -27,4 +32,4 @@ formatters:
     - goimports
   settings:
     goimports:
-      local-prefixes: [github.com/tnfssc/cliproxy-cli]
+      local-prefixes: [github.com/tnfssc/agentctl]

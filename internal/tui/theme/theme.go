@@ -1,5 +1,5 @@
 // Package theme holds the palette and shared Lip Gloss styles so every
-// screen in cliproxy looks like the same product.
+// screen in agentctl looks like the same product.
 package theme
 
 import (

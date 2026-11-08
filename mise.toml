@@ -6,12 +6,12 @@ golangci-lint = "2.15.0"
 GOTOOLCHAIN = "local"
 
 [tasks.build]
-description = "Build bin/cliproxy"
-run = "go build -trimpath -ldflags \"-s -w -X github.com/tnfssc/cliproxy-cli/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/cliproxy-cli/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" -o bin/cliproxy ./cmd/cliproxy"
+description = "Build bin/agentctl"
+run = "go build -trimpath -ldflags \"-s -w -X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" -o bin/agentctl ./cmd/agentctl"
 
-[tasks.demo]
-description = "Run the animated demo"
-run = "go run ./cmd/cliproxy demo"
+[tasks.install]
+description = "Install agentctl into $GOBIN (~/go/bin)"
+run = "go install -trimpath -ldflags \"-X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" ./cmd/agentctl"
 
 [tasks.test]
 description = "Run tests with the race detector"

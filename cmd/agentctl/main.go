@@ -1,11 +1,11 @@
-// Command cliproxy is the cliproxy command line tool.
+// Command agentctl switches coding agents between their own login and CLIProxyAPI servers.
 package main
 
 import (
 	"context"
 	"os"
 
-	"github.com/tnfssc/cliproxy-cli/internal/cli"
+	"github.com/tnfssc/agentctl/internal/cli"
 )
 
 func main() {
