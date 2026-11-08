@@ -34,6 +34,8 @@ func keyPress(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
 
+func click(id string) pointerMsg { return pointerMsg{id: id, kind: pointerClick} }
+
 func loaded() loadedMsg {
 	cfg := &config.Config{Proxies: map[string]config.Proxy{"spark": {URL: "https://spark.example:8445"}}}
 	msg := loadedMsg{cfg: cfg, st: &config.State{}}
@@ -43,21 +45,21 @@ func loaded() loadedMsg {
 	return msg
 }
 
+var served = []proxy.Model{{ID: "claude-opus-5-5", OwnedBy: "anthropic"}, {ID: "gpt-6.1-sol", OwnedBy: "openai"}}
+
 func TestCodexModelPickerHidesClaude(t *testing.T) {
 	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded())
-	m = send(t, m, keyPress("down"), keyPress("enter")) // Codex
-	if m.screen != routeScreen || m.req.Agent != "codex" {
-		t.Fatalf("screen %v agent %q", m.screen, m.req.Agent)
+	m = send(t, m, click("switch:codex"))
+	if m.dialog != routeDialog || m.req.Agent != "codex" {
+		t.Fatalf("dialog %v agent %q", m.dialog, m.req.Agent)
 	}
-	m = send(t, m, keyPress("down"), keyPress("enter")) // proxy spark
+	m = send(t, m, click("m:opt:1"))
 	if m.busy == "" {
 		t.Fatal("choosing a proxy should load its models")
 	}
-	m = send(t, m, modelsMsg{route: "spark", list: []proxy.Model{
-		{ID: "claude-opus-5-5", OwnedBy: "anthropic"}, {ID: "gpt-6.1-sol", OwnedBy: "openai"},
-	}})
-	if m.screen != modelScreen {
-		t.Fatalf("screen = %v", m.screen)
+	m = send(t, m, modelsMsg{route: "spark", list: served})
+	if m.dialog != modelDialog {
+		t.Fatalf("dialog = %v", m.dialog)
 	}
 	for _, o := range m.options {
 		if strings.Contains(o.value, "claude") {
@@ -66,32 +68,41 @@ func TestCodexModelPickerHidesClaude(t *testing.T) {
 	}
 }
 
-func TestClaudeModelPickerShowsEverything(t *testing.T) {
-	m := send(t, New(context.Background()), loaded(), keyPress("enter"), keyPress("down"), keyPress("enter"))
-	m = send(t, m, modelsMsg{route: "spark", list: []proxy.Model{
-		{ID: "claude-opus-5-5", OwnedBy: "anthropic"}, {ID: "gpt-6.1-sol", OwnedBy: "openai"},
-	}})
+func TestClaudeModelPickerShowsEverythingAndWarnsOnce(t *testing.T) {
+	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded(),
+		keyPress("enter"), keyPress("down"), keyPress("enter"), modelsMsg{route: "spark", list: served})
 	if len(m.options) != 3 {
 		t.Fatalf("want keep-current plus 2 models, got %d", len(m.options))
 	}
 	m = send(t, m, keyPress("down"), keyPress("enter"))
-	if m.screen != ackScreen {
-		t.Fatalf("first Claude proxy route must show the policy warning, screen = %v", m.screen)
+	if m.dialog != ackDialog {
+		t.Fatalf("first Claude proxy route must show the policy warning, dialog = %v", m.dialog)
 	}
 	m = send(t, m, keyPress("n"))
-	if m.screen != homeScreen {
-		t.Fatalf("declining should go home, screen = %v", m.screen)
+	if m.dialog != noDialog {
+		t.Fatalf("declining should close, dialog = %v", m.dialog)
+	}
+}
+
+func TestClickOutsideDialogCloses(t *testing.T) {
+	m := send(t, New(context.Background()), loaded(), click("agent:claude"))
+	if m.dialog != routeDialog {
+		t.Fatalf("dialog = %v", m.dialog)
+	}
+	if m = send(t, m, click("proxy:spark")); m.dialog != noDialog {
+		t.Fatal("clicking the dimmed page behind a dialog should close it")
 	}
 }
 
 func TestViewFitsTerminal(t *testing.T) {
-	for _, w := range []int{60, 120} {
-		m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: w, Height: 30}, loaded())
-		if got := lipgloss.Width(m.View().Content); got > w {
-			t.Errorf("width %d: view is %d cells wide", w, got)
+	for _, size := range [][2]int{{60, 24}, {120, 40}} {
+		m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: size[0], Height: size[1]}, loaded())
+		content := m.View().Content
+		if w, h := lipgloss.Size(content); w > size[0] || h > size[1] {
+			t.Errorf("%v: view is %dx%d", size, w, h)
 		}
-		if !strings.Contains(m.View().Content, "Claude Code") {
-			t.Errorf("width %d: home is missing agents", w)
+		if !strings.Contains(content, "CLAUDE CODE") {
+			t.Errorf("%v: home is missing agents", size)
 		}
 	}
 }
@@ -99,12 +110,51 @@ func TestViewFitsTerminal(t *testing.T) {
 func TestRemoveRefusedWhileInUse(t *testing.T) {
 	msg := loaded()
 	msg.statuses[1].status.Route = "spark"
-	m := send(t, New(context.Background()), msg, keyPress("down"), keyPress("down"), keyPress("d"))
-	if m.screen != removeScreen || m.usedBy("spark") != "Codex" {
-		t.Fatalf("screen %v usedBy %q", m.screen, m.usedBy("spark"))
+	m := send(t, New(context.Background()), msg, click("rm:spark"))
+	if m.dialog != removeDialog || m.usedBy("spark") != "Codex" {
+		t.Fatalf("dialog %v usedBy %q", m.dialog, m.usedBy("spark"))
 	}
 	m = send(t, m, keyPress("y"))
-	if m.busy != "" || m.screen != homeScreen {
+	if m.busy != "" || m.dialog != noDialog {
 		t.Fatal("removing a proxy in use must not start")
+	}
+}
+
+func TestAddFormValidatesBeforeChecking(t *testing.T) {
+	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 40}, loaded(), click("add"))
+	if m.dialog != addDialog {
+		t.Fatalf("dialog = %v", m.dialog)
+	}
+	m = send(t, m, click("m:submit"))
+	if m.busy != "" || m.formErr == "" {
+		t.Fatalf("empty form must not be checked: busy %q err %q", m.busy, m.formErr)
+	}
+}
+
+// TestMouseHitsElements drives OnMouse with real click coordinates, so the
+// layout and the hit testing stay in agreement.
+func TestMouseHitsElements(t *testing.T) {
+	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
+	v := m.View()
+	found := map[string]bool{}
+	for y := range 40 {
+		for x := range 120 {
+			cmd := v.OnMouse(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+			if cmd == nil {
+				continue
+			}
+			if p, ok := cmd().(pointerMsg); ok && p.id != "" {
+				found[p.id] = true
+			}
+		}
+	}
+	for _, id := range []string{"switch:claude", "agent:codex", "test:spark", "rm:spark", "add", "refresh", "quit"} {
+		if !found[id] {
+			t.Errorf("no screen cell resolves to %q", id)
+		}
+	}
+	// Clicking the Codex switch button opens its route dialog.
+	if m = send(t, m, click("switch:codex")); m.dialog != routeDialog {
+		t.Fatalf("dialog = %v", m.dialog)
 	}
 }

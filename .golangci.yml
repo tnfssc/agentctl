@@ -24,7 +24,7 @@ linters:
     rules:
       # Tests own the model type; a failed assertion should panic loudly.
       - path: _test\.go
-        linters: [forcetypeassert]
+        linters: [forcetypeassert, gosec]
 
 formatters:
   enable:
