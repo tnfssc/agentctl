@@ -217,7 +217,7 @@ func TestTuneDialog(t *testing.T) {
 	if m.dialog != tuneDialog || !m.tuneWant["analytics"] || !m.tuneWant["no-approvals"] {
 		t.Fatalf("dialog %v want %v", m.dialog, m.tuneWant)
 	}
-	if !strings.Contains(m.View().Content, "Reset to defaults") {
+	if !strings.Contains(m.View().Content, "Reset to default") {
 		t.Fatal("dialog needs a reset button")
 	}
 	m = send(t, m, click("m:opt:1"))

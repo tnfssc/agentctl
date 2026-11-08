@@ -113,10 +113,15 @@ func (p Palette) Box(content string, focused bool) string {
 	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Render(content)
 }
 
-// Button is an outlined button; primary buttons are a solid block of the
-// same size. Hovered buttons light up their outline, or turn the block to the
-// accent color.
-func (p Palette) Button(label string, primary, hover bool) string {
+// Button is a three-row button exactly width cells wide, label centered and
+// truncated to fit, so swapping labels never moves anything. Primary buttons
+// are a solid block; hovered buttons light up their outline or turn the block
+// to the accent color.
+func (p Palette) Button(label string, width int, primary, hover bool) string {
+	inner := max(1, width-2)
+	label = ansi.Truncate(label, inner, "…")
+	left := (inner - lipgloss.Width(label)) / 2
+	text := strings.Repeat(" ", left) + label + strings.Repeat(" ", inner-left-lipgloss.Width(label))
 	if primary {
 		bg, fg := p.Text, lipgloss.Color("#0B0B0F")
 		if !p.IsDark {
@@ -125,23 +130,35 @@ func (p Palette) Button(label string, primary, hover bool) string {
 		if hover {
 			bg = p.Accent
 		}
-		w := lipgloss.Width(label) + 4
-		blank := On(fg, bg).Render(strings.Repeat(" ", w))
-		return blank + "\n" + On(fg, bg).Render("  ") + On(fg, bg).Bold(true).Render(label) + On(fg, bg).Render("  ") + "\n" + blank
+		blank := On(fg, bg).Render(strings.Repeat(" ", width))
+		return blank + "\n" + On(fg, bg).Render(" ") + On(fg, bg).Bold(true).Render(text) + On(fg, bg).Render(" ") + "\n" + blank
 	}
 	border, fg := p.Strong, p.Muted
 	if hover {
 		border, fg = p.Text, p.Text
 	}
-	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).
-		Render(Fg(fg).Render(" " + label + " "))
+	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Render(Fg(fg).Render(text))
 }
 
-// Pill is the bordered status badge: a colored square, then dim and bright
-// text, e.g. "■ prod server / running".
-func (p Palette) Pill(dot color.Color, dim, bright string) string {
-	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Line).
-		Render(Fg(dot).Render("■") + " " + Fg(p.Muted).Render(dim) + Fg(p.Dim).Render(" / ") + Fg(p.Text).Render(bright))
+// Pill is the bordered status badge, a colored square then dim and bright
+// text ("■ prod server / running"), always width cells wide.
+func (p Palette) Pill(dot color.Color, dim, bright string, width int) string {
+	s := Fg(dot).Render("■") + " " + Fg(p.Muted).Render(dim) + Fg(p.Dim).Render(" / ") + Fg(p.Text).Render(bright)
+	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Line).Render(Cell(s, width-2))
+}
+
+// Cell truncates or pads styled text to exactly width cells.
+func Cell(s string, width int) string { return pad(ansi.Truncate(s, max(0, width), "…"), width) }
+
+// Clip wraps text to width and keeps at most lines lines, ending the last
+// one with an ellipsis when text was cut.
+func Clip(text string, width, lines int) []string {
+	out := strings.Split(lipgloss.Wrap(text, max(1, width), ""), "\n")
+	if len(out) > lines {
+		out = out[:lines]
+		out[lines-1] = ansi.Truncate(out[lines-1], max(1, width-1), "") + "…"
+	}
+	return out
 }
 
 // Wordmark is the product name in the site's "VOID(∅)" manner.
@@ -149,30 +166,24 @@ func (p Palette) Wordmark() string {
 	return Fg(p.Text).Bold(true).Render("AGENTCTL") + Fg(p.Accent).Bold(true).Render("(∅)")
 }
 
-// Row renders one list row at width: selected rows sit on a raised fill with
-// an accent marker, hovered rows brighten, the rest are dim.
-func (p Palette) Row(icon, label, detail string, width int, selected, hover bool) string {
+// Row renders one list row exactly width cells wide: icon, label in a
+// labelW-wide column, then detail. Selected rows sit on a raised fill with an
+// accent marker, hovered rows brighten, the rest are dim.
+func (p Palette) Row(icon, label string, labelW int, detail string, width int, selected, hover bool) string {
+	label = Cell(label, labelW)
+	if detail != "" {
+		detail = "  " + detail
+	}
 	switch {
 	case selected:
 		on := On(p.Text, p.Raised)
-		s := On(p.Accent, p.Raised).Render("▎") + on.Render(icon+" ") + on.Bold(true).Render(label)
-		if detail != "" {
-			s += On(p.Muted, p.Raised).Render("  " + detail)
-		}
+		s := On(p.Accent, p.Raised).Render("▎") + on.Render(icon+" ") + on.Bold(true).Render(label) + On(p.Muted, p.Raised).Render(detail)
 		s = ansi.Truncate(s, width, "…")
 		return s + On(p.Text, p.Raised).Render(strings.Repeat(" ", max(0, width-lipgloss.Width(s))))
 	case hover:
-		s := " " + Fg(p.Text).Render(icon+" "+label)
-		if detail != "" {
-			s += Fg(p.Muted).Render("  " + detail)
-		}
-		return pad(ansi.Truncate(s, width, "…"), width)
+		return Cell(" "+Fg(p.Text).Render(icon+" "+label)+Fg(p.Muted).Render(detail), width)
 	default:
-		s := " " + Fg(p.Dim).Render(icon+" ") + Fg(p.Muted).Render(label)
-		if detail != "" {
-			s += Fg(p.Dim).Render("  " + detail)
-		}
-		return pad(ansi.Truncate(s, width, "…"), width)
+		return Cell(" "+Fg(p.Dim).Render(icon+" ")+Fg(p.Muted).Render(label)+Fg(p.Dim).Render(detail), width)
 	}
 }
 

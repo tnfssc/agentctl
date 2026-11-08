@@ -16,7 +16,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
@@ -377,7 +376,7 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
-	case "close", "cancel":
+	case "close", "close-btn", "cancel":
 		return m.close("", false), nil
 	case "back":
 		return m.openRoutes(m.statusOf(m.req.Agent))
@@ -633,15 +632,8 @@ func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 	m.plan = msg.plan
 	m.dialog = confirmDialog
 	m.sizeDialog()
-	var b strings.Builder
-	for _, w := range msg.plan.Warnings {
-		b.WriteString(m.diff.Warning.Render(lipgloss.Wrap("! "+w, m.vp.Width(), "")) + "\n")
-	}
-	if len(msg.plan.Warnings) > 0 {
-		b.WriteString("\n")
-	}
-	b.WriteString(m.diff.Diff(msg.plan.Diff()))
-	m.setReport(b.String())
+	// Warnings have their own fixed rows above the diff (see drawDialog).
+	m.setReport(m.diff.Diff(msg.plan.Diff()))
 	return m, nil
 }
 
@@ -714,11 +706,10 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	return m, saveProxy(m.ctx, name, config.Proxy{URL: url, Key: key})
 }
 
-// setReport shows text in the dialog's scroll area, which shrinks to fit
-// short text and scrolls long text.
+// setReport shows text in the dialog's scroll area. The area keeps its size
+// whatever the text; long text scrolls.
 func (m *Model) setReport(text string) {
 	m.sizeDialog()
-	m.vp.SetHeight(max(3, min(lipgloss.Height(text), m.vp.Height())))
 	m.vp.SetContent(text)
 	m.vp.GotoTop()
 }

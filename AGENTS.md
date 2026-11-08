@@ -33,6 +33,13 @@ errors styled to stderr. Commands write through `cmd.OutOrStdout()` so tests can
   stderr, only when stdin and stdout are terminals, otherwise commands need `--yes`.
 - Styles come from `internal/tui/theme`.
 
+## No layout shift (hard rule)
+
+Nothing on screen may move or resize because of hover, selection, scrolling, focus, spinners, loading, status
+messages, probe results or dialogs opening. Reserve space for anything that can appear (fixed-width columns, fixed
+rows for messages, padded labels, scroll windows of constant height with constant-size indicators). Every UI change
+must keep this; tests in `internal/tui/dash` check it.
+
 ## Dashboard
 
 Bare `agentctl` opens a small dashboard (`internal/tui/dash`, look in `internal/tui/skin`, after voidzero.dev):
