@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  enable:
+    - errorlint
+    - nilerr
+    - forcetypeassert
+    - durationcheck
+    - gocritic
+    - revive
+    - misspell
+    - perfsprint
+    - unconvert
+    - gosec
+    - bidichk
+    - noctx
+  exclusions:
+    presets: [std-error-handling]
+    rules:
+      # Tests own the model type; a failed assertion should panic loudly.
+      - path: _test\.go
+        linters: [forcetypeassert]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/tnfssc/cliproxy-cli]

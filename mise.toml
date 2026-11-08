@@ -1,0 +1,26 @@
+[tools]
+go = "1.26.10"
+golangci-lint = "2.15.0"
+
+[env]
+GOTOOLCHAIN = "local"
+
+[tasks.build]
+description = "Build bin/cliproxy"
+run = "go build -trimpath -ldflags \"-s -w -X github.com/tnfssc/cliproxy-cli/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/cliproxy-cli/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" -o bin/cliproxy ./cmd/cliproxy"
+
+[tasks.demo]
+description = "Run the animated demo"
+run = "go run ./cmd/cliproxy demo"
+
+[tasks.test]
+description = "Run tests with the race detector"
+run = "go test -race ./..."
+
+[tasks.lint]
+description = "Vet and lint"
+run = ["go vet ./...", "golangci-lint run"]
+
+[tasks.check]
+description = "Everything CI runs"
+depends = ["lint", "test", "build"]

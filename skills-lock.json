@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "skills": {
+    "charmed-bubbles": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-bubbles/SKILL.md",
+      "computedHash": "fa5c4a3b30c00d788b0b909a7d74c0209b46d7d770ba556679e478ebac02d0f8"
+    },
+    "charmed-bubbletea": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-bubbletea/SKILL.md",
+      "computedHash": "ff2d6fb935b73646cfdabd81dfa04f7e114adcafc727bf0291840159673e6fad"
+    },
+    "charmed-ecosystem": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-ecosystem/SKILL.md",
+      "computedHash": "b123e30c44b87a1ad12adbd671d17be4e1fc00c92c200bbc2920434f7f4cf473"
+    },
+    "charmed-glamour": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-glamour/SKILL.md",
+      "computedHash": "4f535268f298381697d6708ae60e97d9c3f830346b2eb84150e4d1cdceeeb8e5"
+    },
+    "charmed-huh": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-huh/SKILL.md",
+      "computedHash": "ded116e0b46c6a07fdb67246c8cecd8d856ec9a0659cab5ea0adaece6eec3197"
+    },
+    "charmed-lipgloss": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-lipgloss/SKILL.md",
+      "computedHash": "33d7d800bd35ae4586a34877e1b9d1b1724836b5a02371cc396e1a91d907ce2b"
+    },
+    "charmed-log": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-log/SKILL.md",
+      "computedHash": "94d3038a25cfe4d1991adfa36225a120dd0a05319318a54eed23bc7925259dad"
+    },
+    "charmed-vhs": {
+      "source": "tpscloud/charmedimsure",
+      "sourceType": "github",
+      "skillPath": "skills/charmed-vhs/SKILL.md",
+      "computedHash": "2eb7a63daac91deb7808f6bcdae9a299ab9a0a51e1ae47c7c526643edaee71a5"
+    },
+    "golang-cli": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-cli/SKILL.md",
+      "computedHash": "24db08f64df0fba352d24ebd23188ce6a697cd22387081f618bf170f67931808"
+    },
+    "golang-code-style": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-code-style/SKILL.md",
+      "computedHash": "8ce09e462ef435cedc78307c124adb0c83848366b4bc51cd0942d3c79fff1e71"
+    },
+    "golang-concurrency": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-concurrency/SKILL.md",
+      "computedHash": "f76a7af92805c94c91b7aea0f743e20c4613ca346203cbd7f0e9d296a7970385"
+    },
+    "golang-context": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-context/SKILL.md",
+      "computedHash": "5f4f7696bb5228139f200faf3918dcb8b796c94717ede72794d06e9da72f094f"
+    },
+    "golang-continuous-integration": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-continuous-integration/SKILL.md",
+      "computedHash": "891e65e6e29d768dc56bafcaabab4ec58dcd57dd3a126a115913f3b4a4e2204a"
+    },
+    "golang-error-handling": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-error-handling/SKILL.md",
+      "computedHash": "7b872085d11457427db2d5559f530d9a7c4d93e09c4709a030731868084db6d3"
+    },
+    "golang-lint": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-lint/SKILL.md",
+      "computedHash": "386edc2ea3e124ead8c03adec369070aa569bf4fe6b0e02a5e59566a2991e665"
+    },
+    "golang-naming": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-naming/SKILL.md",
+      "computedHash": "cb920729431ee7a80a06779c4247744f778500a1f8b9fc26595c60e67c053a6f"
+    },
+    "golang-project-layout": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-project-layout/SKILL.md",
+      "computedHash": "33cb4d7b0ad983e521f4b70a8d03652fbf4e4f7bf026e2ca6bf94d8475755013"
+    },
+    "golang-safety": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-safety/SKILL.md",
+      "computedHash": "f0f2ae4454460c1df68085aac47a0ff13043d8546703ad627a703e55ace85705"
+    },
+    "golang-spf13-cobra": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-spf13-cobra/SKILL.md",
+      "computedHash": "7a1b81ab62e96e0af383acc78821c08fc7816cc645271a4d38fcdc6f92bdc2c0"
+    },
+    "golang-testing": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-testing/SKILL.md",
+      "computedHash": "31b691f568f4c00d8d7bedc65a38d9966d9f3d353712929a1a8805eaa3f88b00"
+    },
+    "use-modern-go": {
+      "source": "JetBrains/go-modern-guidelines",
+      "sourceType": "github",
+      "skillPath": "plugin/skills/use-modern-go/SKILL.md",
+      "computedHash": "c308fc949fc8a369b5ea0f2d57072789eda8d05f420b972c67576b285b7ba539"
+    }
+  }
+}
