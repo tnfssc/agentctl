@@ -11,20 +11,28 @@ keeps a backup of every write, and going back to `local` restores the files exac
 
 ## Use
 
+Run `agentctl` in a terminal for the dashboard: where each agent is routed, which proxies work, and a few keys to
+switch routes, add, test or remove proxies, and refresh Codex's model list.
+
+The same things from the command line:
+
 ```sh
-agentctl proxy add spark --url https://spark.example.ts.net:8445   # prompts for the key
-agentctl proxy add home --url http://127.0.0.1:8317 --key-cmd 'cat ~/cliproxyapi/.env | grep KEY | cut -d= -f2'
-agentctl proxy test                  # health, key, models, and upstream logins with --management-key
+agentctl proxy add spark --url https://spark.your-tailnet.ts.net:8445   # prompts for the key
+agentctl proxy test                  # health, key, models, and what Claude Code's /model will show
 agentctl proxy models spark          # which models each agent may use
 
 agentctl use codex spark --model gpt-6.1-sol
 agentctl use claude local
+agentctl refresh                     # rebuild Codex's model list after the proxy's models change
 agentctl status
-agentctl                             # interactive: pick agent, route and model
 ```
 
+A proxy is just a URL and a client API key; reach it however you like (Tailscale serve, a LAN address). For a key
+that should stay on the proxy's machine, `--key-cmd` runs a command to print it instead of storing it.
+
 Models agentctl cannot prove are non-Anthropic are hidden from Codex. Clear one you trust with
-`agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked.
+`agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude Code picks up new
+proxy models on its own at startup; Codex needs `agentctl refresh`.
 
 Routing Claude Code through a proxy asks for a one-time acknowledgement: Anthropic's terms forbid proxies that serve
 Claude subscription logins, and accounts on them can be banned.
@@ -41,7 +49,9 @@ mise run install   # go install with version info
 
 ```
 cmd/agentctl/          main
-internal/cli/          cobra commands (fang for help and errors), interactive mode
+internal/app/          what agentctl does, shared by the CLI and the dashboard
+internal/cli/          cobra commands (fang for help and errors)
+internal/tui/dash/     the dashboard
 internal/agent/        planned file changes: diff, backup, apply
 internal/agent/claude  settings.json routing
 internal/agent/codex   config.toml routing and the filtered model catalog

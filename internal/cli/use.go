@@ -4,47 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/spf13/cobra"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
-	"github.com/tnfssc/agentctl/internal/agent/codex"
+	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
-	"github.com/tnfssc/agentctl/internal/models"
-	"github.com/tnfssc/agentctl/internal/proxy"
 )
-
-// routeStatus is one agent's current route, as its own config describes it.
-type routeStatus struct {
-	Route, URL, Model string
-	Notes             []string
-}
-
-type agentDef struct {
-	name, title string
-	status      func(*config.Config) (routeStatus, error)
-}
-
-var agents = []agentDef{
-	{claude.Name, "Claude Code", func(cfg *config.Config) (routeStatus, error) {
-		s, err := claude.Current(cfg)
-		return routeStatus(s), err
-	}},
-	{codex.Name, "Codex", func(cfg *config.Config) (routeStatus, error) {
-		s, err := codex.Current(cfg)
-		return routeStatus(s), err
-	}},
-}
-
-func agentNames() []string {
-	names := make([]string, len(agents))
-	for i, a := range agents {
-		names[i] = a.name
-	}
-	return names
-}
 
 func newUseCmd() *cobra.Command {
 	var (
@@ -64,7 +31,7 @@ func newUseCmd() *cobra.Command {
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			switch len(args) {
 			case 0:
-				return agentNames(), cobra.ShellCompDirectiveNoFileComp
+				return app.AgentNames(), cobra.ShellCompDirectiveNoFileComp
 			case 1:
 				cfg, err := config.Load()
 				if err != nil {
@@ -75,7 +42,8 @@ func newUseCmd() *cobra.Command {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUse(cmd.Context(), newUI(cmd), useOpts{agent: args[0], route: args[1], model: model, yes: yes, dryRun: dryRun})
+			req := app.Request{Agent: args[0], Route: args[1], Model: model}
+			return runUse(cmd.Context(), newUI(cmd), req, yes, dryRun)
 		},
 	}
 	f := cmd.Flags()
@@ -85,96 +53,82 @@ func newUseCmd() *cobra.Command {
 	return cmd
 }
 
-func describeRoute(route string) string {
-	if route == agent.Local {
-		return "its own login"
+func newRefreshCmd() *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "refresh",
+		Short: "Rebuild Codex's model list from its proxy",
+		Long: "Codex's model list is a snapshot taken when it was routed to a proxy. Run this after the\n" +
+			"proxy gains or drops models. Claude Code needs no refresh; it asks the proxy at startup.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			u := newUI(cmd)
+			cfg, st, err := loadAll()
+			if err != nil {
+				return err
+			}
+			plan, err := app.RefreshCodex(cmd.Context(), cfg, st)
+			if errors.Is(err, app.ErrNothingToRefresh) {
+				u.ok(err.Error())
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return confirmAndApply(u, plan, st, yes, false)
+		},
 	}
-	return "proxy " + route
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "apply without asking")
+	return cmd
 }
 
-type useOpts struct {
-	agent, route, model string
-	yes, dryRun         bool
+func loadAll() (*config.Config, *config.State, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+	st, err := config.LoadState()
+	return cfg, st, err
 }
 
 // runUse plans, shows, confirms and applies one route change.
-func runUse(ctx context.Context, u *ui, o useOpts) error {
-	name, route := o.agent, o.route
-	cfg, err := config.Load()
+func runUse(ctx context.Context, u *ui, req app.Request, yes, dryRun bool) error {
+	cfg, st, err := loadAll()
 	if err != nil {
 		return err
 	}
-	st, err := config.LoadState()
-	if err != nil {
+	if _, err := app.FindAgent(req.Agent); err != nil {
 		return err
 	}
-	var p config.Proxy
-	if route != agent.Local {
-		if p, err = cfg.Lookup(route); err != nil {
-			return err
+	if app.NeedsClaudeAck(st, req) {
+		u.warn(claude.PolicyWarning)
+		if !yes && !dryRun {
+			ok, err := u.confirm("Route Claude Code through "+req.Route+" anyway?", "You will not be asked again.")
+			if err != nil || !ok {
+				return errors.Join(errors.New("cancelled"), err)
+			}
 		}
 	}
+	plan, err := app.Plan(ctx, cfg, st, req)
+	if err != nil {
+		return err
+	}
+	return confirmAndApply(u, plan, st, yes, dryRun)
+}
 
-	var plan agent.Plan
-	switch name {
-	case claude.Name:
-		if route != agent.Local {
-			list, err := fetchModels(ctx, p)
-			if err != nil {
-				return fmt.Errorf("%s: %w", route, err)
-			}
-			if o.model != "" && !slices.ContainsFunc(list, func(m proxy.Model) bool { return m.ID == o.model }) {
-				return fmt.Errorf("%s does not serve %q; see `agentctl proxy models %s`", route, o.model, route)
-			}
-			if !st.ClaudeProxyAcknowledged {
-				u.warn(claude.PolicyWarning)
-				if !o.yes && !o.dryRun {
-					ok, err := u.confirm("Route Claude Code through "+route+" anyway?", "You will not be asked again.")
-					if err != nil || !ok {
-						return errors.Join(errors.New("cancelled"), err)
-					}
-				}
-				st.ClaudeProxyAcknowledged = !o.dryRun
-			}
-		}
-		plan, err = claude.PlanUse(cfg, route, o.model)
-	case codex.Name:
-		var cat codex.Catalog
-		if route != agent.Local {
-			if o.model != "" && models.Classify(o.model, "", nil) == models.Anthropic {
-				return fmt.Errorf("%q is a Claude model; Claude models are only allowed in Claude Code", o.model)
-			}
-			list, err := fetchModels(ctx, p)
-			if err != nil {
-				return fmt.Errorf("%s: %w", route, err)
-			}
-			if cat, err = codex.BuildCatalog(ctx, list, p.AllowModels); err != nil {
-				return err
-			}
-			if err := codex.RememberLocalModel(st); err != nil {
-				return err
-			}
-		}
-		plan, err = codex.PlanUse(cfg, st, route, o.model, cat)
-	default:
-		return fmt.Errorf("unknown agent %q; choose one of %v", name, agentNames())
-	}
-	if err != nil {
-		return err
-	}
-
+func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool) error {
 	for _, w := range plan.Warnings {
 		u.warn(w)
 	}
 	if plan.Empty() {
-		u.ok(fmt.Sprintf("%s already uses %s", name, route))
-		return st.Save()
-	}
-	u.diff(plan.Diff())
-	if o.dryRun {
+		u.ok(fmt.Sprintf("%s already uses %s; nothing to change", plan.Agent, describeRoute(plan.Route)))
 		return nil
 	}
-	if !o.yes {
+	u.diff(plan.Diff())
+	if dryRun {
+		return nil
+	}
+	if !yes {
 		ok, err := u.confirm("Apply these changes?", "Backups go to ~/.config/agentctl/backups.")
 		if err != nil {
 			return err
@@ -183,12 +137,16 @@ func runUse(ctx context.Context, u *ui, o useOpts) error {
 			return errors.New("cancelled")
 		}
 	}
-	if err := plan.Apply(); err != nil {
+	if err := app.Apply(plan, st); err != nil {
 		return err
 	}
-	if err := st.Save(); err != nil {
-		return err
-	}
-	u.ok(fmt.Sprintf("%s now uses %s. Restart running %s sessions to pick it up.", name, describeRoute(route), name))
+	u.ok(fmt.Sprintf("%s now uses %s. Restart running %s sessions to pick it up.", plan.Agent, describeRoute(plan.Route), plan.Agent))
 	return nil
+}
+
+func describeRoute(route string) string {
+	if route == agent.Local {
+		return "its own login"
+	}
+	return "proxy " + route
 }

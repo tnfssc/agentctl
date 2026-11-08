@@ -38,23 +38,7 @@ func (u *ui) ok(msg string) { u.println(u.s.Success.Render("✓ ") + msg) }
 func (u *ui) fail(msg string) { u.println(u.s.Error.Render("✗ ") + msg) }
 
 // diff prints a unified diff with added and removed lines colored.
-func (u *ui) diff(d string) {
-	for line := range strings.Lines(d) {
-		line = strings.TrimRight(line, "\n")
-		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-			u.println(u.s.Title.Render(line))
-		case strings.HasPrefix(line, "+"):
-			u.println(u.s.Success.Render(line))
-		case strings.HasPrefix(line, "-"):
-			u.println(u.s.Error.Render(line))
-		case strings.HasPrefix(line, "@@"):
-			u.println(u.s.Accent.Render(line))
-		default:
-			u.println(u.s.Subtle.Render(line))
-		}
-	}
-}
+func (u *ui) diff(d string) { u.println(u.s.Diff(d)) }
 
 // interactive reports whether we can prompt: both ends must be a terminal.
 func (u *ui) interactive() bool { return isTerminal(u.in) && isTerminal(u.out) }

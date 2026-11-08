@@ -1,5 +1,4 @@
-// Package proxy talks to a CLIProxyAPI server: health, model list and, with a
-// management key, the state of each upstream login.
+// Package proxy talks to a CLIProxyAPI server: health and model lists.
 package proxy
 
 import (
@@ -77,33 +76,29 @@ func (c *Client) Models(ctx context.Context, key string) ([]Model, error) {
 	return body.Data, nil
 }
 
-// Login is one upstream account the proxy holds.
-type Login struct {
-	Name          string    `json:"name"`
-	Provider      string    `json:"provider"`
-	Email         string    `json:"email"`
-	Status        string    `json:"status"`
-	StatusMessage string    `json:"status_message"`
-	Disabled      bool      `json:"disabled"`
-	Unavailable   bool      `json:"unavailable"`
-	NextRetry     time.Time `json:"next_retry_after"`
-	Quota         struct {
-		Exceeded      bool      `json:"exceeded"`
-		Reason        string    `json:"reason"`
-		NextRecoverAt time.Time `json:"next_recover_at"`
-	} `json:"quota"`
-}
-
-// Logins lists the proxy's upstream accounts. It needs the management key and
-// uses the v0 path, which both v7 and v8 servers serve.
-func (c *Client) Logins(ctx context.Context, managementKey string) ([]Login, error) {
+// ModelsAsClaudeCode lists models the way Claude Code's gateway discovery
+// asks for them. CLIProxyAPI answers Claude clients in Anthropic format and,
+// unless configured otherwise, renames non-Claude models to Claude-looking
+// ids; comparing with Models reveals that.
+func (c *Client) ModelsAsClaudeCode(ctx context.Context, key string) ([]string, error) {
 	var body struct {
-		Files []Login `json:"files"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
-	if err := c.get(ctx, "/v0/management/auth-files", managementKey, &body); err != nil {
+	headers := map[string]string{
+		"anthropic-version": "2023-06-01",
+		"x-api-key":         key,
+		"User-Agent":        "claude-cli/2.1.310 (external, cli)",
+	}
+	if err := c.do(ctx, "/v1/models?limit=1000", key, headers, &body); err != nil {
 		return nil, err
 	}
-	return body.Files, nil
+	ids := make([]string, len(body.Data))
+	for i, m := range body.Data {
+		ids[i] = m.ID
+	}
+	return ids, nil
 }
 
 // HTTPError is a non-2xx response.
@@ -128,12 +123,19 @@ func IsUnauthorized(err error) bool {
 }
 
 func (c *Client) get(ctx context.Context, path, bearer string, out any) error {
+	return c.do(ctx, path, bearer, nil, out)
+}
+
+func (c *Client) do(ctx context.Context, path, bearer string, headers map[string]string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
 		return err
 	}
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	res, err := c.HTTP.Do(req)
 	if err != nil {

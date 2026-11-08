@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/proxy"
@@ -62,10 +62,10 @@ func newProxyAddCmd() *cobra.Command {
 					return err
 				}
 			}
-			r := probe(cmd.Context(), p)
+			r := app.ProbeProxy(cmd.Context(), p)
 			report(u, name, p, r)
-			if r.err() != nil && !force {
-				return fmt.Errorf("not saved: %w (use --force to save anyway)", r.err())
+			if r.Err() != nil && !force {
+				return fmt.Errorf("not saved: %w (use --force to save anyway)", r.Err())
 			}
 			cfg.Proxies[name] = p
 			if err := cfg.Save(); err != nil {
@@ -80,8 +80,6 @@ func newProxyAddCmd() *cobra.Command {
 	f.StringVar(&p.URL, "url", "", "proxy base URL, e.g. http://127.0.0.1:8317")
 	f.StringVar(&p.Key, "key", "", "client API key (prefer --key-cmd or the prompt)")
 	f.StringVar(&p.KeyCmd, "key-cmd", "", "shell command that prints the client API key")
-	f.StringVar(&p.ManagementKey, "management-key", "", "management key, enables login status in `proxy test`")
-	f.StringVar(&p.ManagementKeyCmd, "management-key-cmd", "", "shell command that prints the management key")
 	f.BoolVar(&force, "force", false, "replace an existing proxy, or save one that fails its check")
 	_ = cmd.MarkFlagRequired("url")
 	return cmd
@@ -109,11 +107,7 @@ func newProxyListCmd() *cobra.Command {
 				if p.KeyCmd != "" {
 					key = "key via command"
 				}
-				extra := ""
-				if p.ManagementKey != "" || p.ManagementKeyCmd != "" {
-					extra = ", management key"
-				}
-				u.println(u.s.Text.Bold(true).Render(name) + "  " + p.URL + u.s.Subtle.Render("  ("+key+extra+")"))
+				u.println(u.s.Text.Bold(true).Render(name) + "  " + p.URL + u.s.Subtle.Render("  ("+key+")"))
 			}
 			return nil
 		},
@@ -135,9 +129,9 @@ func newProxyRemoveCmd() *cobra.Command {
 			if _, err := cfg.Lookup(args[0]); err != nil {
 				return err
 			}
-			for _, a := range agents {
-				if st, err := a.status(cfg); err == nil && st.Route == args[0] {
-					return fmt.Errorf("%s is routed to %s; run `agentctl use %s local` first", a.name, args[0], a.name)
+			for _, a := range app.Agents {
+				if st, err := a.Status(cfg); err == nil && st.Route == args[0] {
+					return fmt.Errorf("%s is routed to %s; run `agentctl use %s local` first", a.Name, args[0], a.Name)
 				}
 			}
 			delete(cfg.Proxies, args[0])
@@ -153,7 +147,7 @@ func newProxyRemoveCmd() *cobra.Command {
 func newProxyTestCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "test [name...]",
-		Short: "Check health, key, models and (with a management key) upstream logins",
+		Short: "Check health, key and models, and what Claude Code would see",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			u := newUI(cmd)
 			cfg, err := config.Load()
@@ -176,9 +170,9 @@ func newProxyTestCmd() *cobra.Command {
 				if i > 0 {
 					u.println()
 				}
-				r := probe(cmd.Context(), p)
+				r := app.ProbeProxy(cmd.Context(), p)
 				report(u, name, p, r)
-				if r.err() != nil {
+				if r.Err() != nil {
 					failed = append(failed, name)
 				}
 			}
@@ -205,7 +199,7 @@ func newProxyModelsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			list, err := fetchModels(cmd.Context(), p)
+			list, err := app.FetchModels(cmd.Context(), p)
 			if err != nil {
 				return err
 			}
@@ -273,115 +267,29 @@ func newProxyAllowCmd() *cobra.Command {
 	return cmd
 }
 
-// probeResult is everything `proxy test` learns about one proxy.
-type probeResult struct {
-	healthErr error
-	latency   time.Duration
-	models    []proxy.Model
-	modelsErr error
-	logins    []proxy.Login
-	loginsErr error
-	noMgmt    bool
-}
-
-func (r probeResult) err() error {
-	return errors.Join(r.healthErr, r.modelsErr)
-}
-
-func probe(ctx context.Context, p config.Proxy) probeResult {
-	var r probeResult
-	c, err := proxy.New(p.URL)
-	if err != nil {
-		r.healthErr = err
-		return r
-	}
-	start := time.Now()
-	if r.healthErr = c.Health(ctx); r.healthErr != nil {
-		return r
-	}
-	r.latency = time.Since(start)
-	r.models, r.modelsErr = fetchModels(ctx, p)
-	mk, err := p.ResolveManagementKey(ctx)
-	switch {
-	case err != nil:
-		r.loginsErr = err
-	case mk == "":
-		r.noMgmt = true
-	default:
-		r.logins, r.loginsErr = c.Logins(ctx, mk)
-	}
-	return r
-}
-
-func fetchModels(ctx context.Context, p config.Proxy) ([]proxy.Model, error) {
-	c, err := proxy.New(p.URL)
-	if err != nil {
-		return nil, err
-	}
-	key, err := p.ResolveKey(ctx)
-	if err != nil {
-		return nil, err
-	}
-	list, err := c.Models(ctx, key)
-	if proxy.IsUnauthorized(err) {
-		return nil, errors.New("the proxy rejected the API key")
-	}
-	return list, err
-}
-
-func report(u *ui, name string, p config.Proxy, r probeResult) {
+func report(u *ui, name string, p config.Proxy, r app.Probe) {
 	u.println(u.s.Title.Render(name) + "  " + u.s.Subtle.Render(p.URL))
-	if r.healthErr != nil {
-		u.fail("unreachable: " + r.healthErr.Error())
+	if r.HealthErr != nil {
+		u.fail("unreachable: " + r.HealthErr.Error())
 		return
 	}
-	u.ok(fmt.Sprintf("healthy (%s)", r.latency.Round(time.Millisecond)))
-	if r.modelsErr != nil {
-		u.fail("models: " + r.modelsErr.Error())
-	} else {
-		var claude, other, unknown int
-		for _, m := range r.models {
-			switch models.Classify(m.ID, m.OwnedBy, p.AllowModels) {
-			case models.Anthropic:
-				claude++
-			case models.Other:
-				other++
-			default:
-				unknown++
-			}
-		}
-		u.ok(fmt.Sprintf("key accepted, %d models: %d Claude (Claude Code only), %d for all agents, %d unverified", len(r.models), claude, other, unknown))
+	u.ok(fmt.Sprintf("healthy (%s)", r.Latency.Round(time.Millisecond)))
+	if r.ModelsErr != nil {
+		u.fail("models: " + r.ModelsErr.Error())
+		return
 	}
+	u.ok(fmt.Sprintf("key accepted, %d models: %d Claude (Claude Code only), %d for all agents, %d unverified",
+		len(r.Models), r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
 	switch {
-	case r.noMgmt:
-		u.println(u.s.Subtle.Render("  add --management-key to see upstream login health"))
-	case r.loginsErr != nil:
-		u.fail("logins: " + r.loginsErr.Error())
+	case r.DiscoveryErr != nil:
+		u.warn("Claude Code's /model list will not show proxy models: " + r.DiscoveryErr.Error())
+	case r.SlowDiscovery():
+		u.warn(fmt.Sprintf("the proxy took %s to list models; Claude Code gives up after 3s and shows only built-in models",
+			r.DiscoveryLatency.Round(time.Millisecond)))
+	case len(r.Disguised) > 0:
+		u.warn(fmt.Sprintf("Claude Code will see %d non-Claude models under disguised names (e.g. %s). "+
+			"Set disable-cloaking-model-list on the proxy to show real names.", len(r.Disguised), r.Disguised[0]))
 	default:
-		for _, l := range r.logins {
-			loginLine(u, l)
-		}
-	}
-}
-
-func loginLine(u *ui, l proxy.Login) {
-	who := l.Provider + "  " + l.Email
-	switch {
-	case l.Disabled:
-		u.println(u.s.Subtle.Render("  - " + who + "  disabled"))
-	case l.Quota.Exceeded:
-		until := ""
-		if !l.Quota.NextRecoverAt.IsZero() {
-			until = " for " + time.Until(l.Quota.NextRecoverAt).Round(time.Minute).String()
-		}
-		u.println(u.s.Warning.Render("  ! " + who + "  quota exhausted" + until))
-	case l.Status == "error" || l.Unavailable:
-		msg := l.StatusMessage
-		if msg == "" {
-			msg = "unavailable"
-		}
-		u.println(u.s.Error.Render("  ✗ " + who + "  " + msg))
-	default:
-		u.println(u.s.Success.Render("  ✓ ") + who + u.s.Subtle.Render("  "+l.Status))
+		u.ok("Claude Code will see the proxy's models under their real names")
 	}
 }

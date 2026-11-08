@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tnfssc/agentctl/internal/agent"
+	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 )
 
@@ -26,10 +27,10 @@ func printStatus(u *ui) error {
 	if err != nil {
 		return err
 	}
-	for _, a := range agents {
-		st, err := a.status(cfg)
+	for _, a := range app.Agents {
+		st, err := a.Status(cfg)
 		if err != nil {
-			u.fail(fmt.Sprintf("%-12s %v", a.title, err))
+			u.fail(fmt.Sprintf("%-12s %v", a.Title, err))
 			continue
 		}
 		route := u.s.Success.Render("own login")
@@ -43,7 +44,7 @@ func printStatus(u *ui) error {
 		if st.Route == "custom" && st.URL != "" {
 			detail = append(detail, st.URL)
 		}
-		u.println(u.s.Text.Bold(true).Render(fmt.Sprintf("%-12s", a.title)) + " " + route + "  " + u.s.Subtle.Render(strings.Join(detail, "  ")))
+		u.println(u.s.Text.Bold(true).Render(fmt.Sprintf("%-12s", a.Title)) + " " + route + "  " + u.s.Subtle.Render(strings.Join(detail, "  ")))
 		for _, n := range st.Notes {
 			u.warn(n)
 		}

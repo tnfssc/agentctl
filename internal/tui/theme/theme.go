@@ -4,6 +4,7 @@ package theme
 
 import (
 	"image/color"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 )
@@ -53,4 +54,26 @@ func New(isDark bool) Styles {
 			BorderForeground(subtle).
 			Padding(1, 2),
 	}
+}
+
+// Diff colors a unified diff line by line.
+func (s Styles) Diff(d string) string {
+	var b strings.Builder
+	for line := range strings.Lines(d) {
+		line = strings.TrimRight(line, "\n")
+		switch {
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+			line = s.Title.Render(line)
+		case strings.HasPrefix(line, "+"):
+			line = s.Success.Render(line)
+		case strings.HasPrefix(line, "-"):
+			line = s.Error.Render(line)
+		case strings.HasPrefix(line, "@@"):
+			line = s.Accent.Render(line)
+		default:
+			line = s.Subtle.Render(line)
+		}
+		b.WriteString(line + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

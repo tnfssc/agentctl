@@ -36,6 +36,17 @@ func Home(t *testing.T) string {
 // Proxy starts a fake CLIProxyAPI serving the given model ids and owners.
 func Proxy(t *testing.T, models map[string]string) *httptest.Server {
 	t.Helper()
+	return proxy(t, models, false)
+}
+
+// CloakingProxy is Proxy, but like a default CLIProxyAPI it renames
+// non-Claude models when a Claude client lists them.
+func CloakingProxy(t *testing.T, models map[string]string) *httptest.Server {
+	t.Helper()
+	return proxy(t, models, true)
+}
+
+func proxy(t *testing.T, models map[string]string, cloak bool) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -51,6 +62,9 @@ func Proxy(t *testing.T, models map[string]string) *httptest.Server {
 		}
 		var data []m
 		for id, owner := range models {
+			if cloak && r.Header.Get("anthropic-version") != "" && owner != "anthropic" {
+				id = "claude-fable-5-dd-" + id
+			}
 			data = append(data, m{id, owner})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})

@@ -23,11 +23,9 @@ import (
 // a command, so a key can stay on the machine that owns it (e.g. read over
 // ssh) instead of being copied here.
 type Proxy struct {
-	URL              string `toml:"url"`
-	Key              string `toml:"key,omitempty"`
-	KeyCmd           string `toml:"key_cmd,omitempty"`
-	ManagementKey    string `toml:"management_key,omitempty"`
-	ManagementKeyCmd string `toml:"management_key_cmd,omitempty"`
+	URL    string `toml:"url"`
+	Key    string `toml:"key,omitempty"`
+	KeyCmd string `toml:"key_cmd,omitempty"`
 	// AllowModels clears models agentctl cannot prove are non-Anthropic for
 	// agents other than Claude Code. It never overrides a Claude match.
 	AllowModels []string `toml:"allow_models,omitempty"`
@@ -133,15 +131,7 @@ func (c *Config) Lookup(name string) (Proxy, error) {
 
 // ResolveKey returns the client API key, running KeyCmd if set.
 func (p Proxy) ResolveKey(ctx context.Context) (string, error) {
-	return resolve(ctx, p.Key, p.KeyCmd, "key")
-}
-
-// ResolveManagementKey returns the management key, or "" if none is set.
-func (p Proxy) ResolveManagementKey(ctx context.Context) (string, error) {
-	return resolve(ctx, p.ManagementKey, p.ManagementKeyCmd, "management key")
-}
-
-func resolve(ctx context.Context, inline, cmd, what string) (string, error) {
+	inline, cmd, what := p.Key, p.KeyCmd, "key"
 	if cmd == "" {
 		return inline, nil
 	}
