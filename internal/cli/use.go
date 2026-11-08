@@ -47,7 +47,7 @@ func newUseCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&model, "model", "", "model to use on the proxy (default: keep the current one if the proxy has it)")
+	f.StringVar(&model, "model", "", "Codex model to use on the proxy (Claude Code uses /model)")
 	f.BoolVarP(&yes, "yes", "y", false, "apply without asking")
 	f.BoolVar(&dryRun, "dry-run", false, "show the changes without applying them")
 	return cmd

@@ -68,7 +68,7 @@ func TestSwitchingEndToEnd(t *testing.T) {
 		t.Fatal("want --yes error without a terminal")
 	}
 	must(t, "use", "codex", "spark", "--yes")
-	must(t, "use", "claude", "spark", "--model", "gpt-6.1-sol", "--yes")
+	must(t, "use", "claude", "spark", "--yes")
 
 	out = must(t, "status")
 	if strings.Count(out, "proxy spark") != 2 {
@@ -140,5 +140,14 @@ func TestTokenWithoutKey(t *testing.T) {
 	}
 	if out := must(t, "token", "open"); strings.TrimSpace(out) != noKey {
 		t.Fatalf("token = %q", out)
+	}
+}
+
+func TestClaudeModelFlagIsRejected(t *testing.T) {
+	_, url := setup(t)
+	must(t, "proxy", "add", "spark", "--url", url, "--key", testutil.Key)
+	_, err := execute(t, "use", "claude", "spark", "--model", "Opus 5.5", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "with /model") {
+		t.Fatalf("want /model guidance, got %v", err)
 	}
 }

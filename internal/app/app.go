@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/tnfssc/agentctl/internal/agent"
@@ -86,16 +85,15 @@ func Plan(ctx context.Context, cfg *config.Config, st *config.State, r Request) 
 	}
 	switch r.Agent {
 	case claude.Name:
+		if r.Model != "" {
+			return agent.Plan{}, errors.New("choose Claude Code's model with /model, not --model; agentctl only switches its route")
+		}
 		if r.Route != agent.Local {
-			list, err := FetchModels(ctx, p)
-			if err != nil {
+			if _, err := FetchModels(ctx, p); err != nil {
 				return agent.Plan{}, fmt.Errorf("%s: %w", r.Route, err)
 			}
-			if r.Model != "" && !slices.ContainsFunc(list, func(m proxy.Model) bool { return m.ID == r.Model }) {
-				return agent.Plan{}, fmt.Errorf("%s does not serve %q", r.Route, r.Model)
-			}
 		}
-		return claude.PlanUse(cfg, r.Route, r.Model)
+		return claude.PlanUse(cfg, r.Route)
 	case codex.Name:
 		var cat codex.Catalog
 		if r.Route != agent.Local {

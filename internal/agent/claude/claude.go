@@ -122,8 +122,9 @@ func shellNotes(route string) []string {
 }
 
 // PlanUse prepares the settings change that routes Claude Code to route
-// ("local" or a proxy name), optionally pinning model.
-func PlanUse(cfg *config.Config, route, model string) (agent.Plan, error) {
+// ("local" or a proxy name). Model selection stays with Claude Code; any
+// ANTHROPIC_MODEL override is removed so /model controls future sessions.
+func PlanUse(cfg *config.Config, route string) (agent.Plan, error) {
 	path, err := SettingsPath()
 	if err != nil {
 		return agent.Plan{}, err
@@ -179,9 +180,6 @@ func PlanUse(cfg *config.Config, route, model string) (agent.Plan, error) {
 			{"env." + envBaseURL, base},
 			{"env." + envDiscovery, "1"},
 			{"apiKeyHelper", shellQuote(exe) + " token " + route},
-		}
-		if model != "" {
-			sets = append(sets, struct{ path, value string }{"env." + envModel, model})
 		}
 		for _, s := range sets {
 			if src, err = sjson.SetBytes(src, s.path, s.value); err != nil {

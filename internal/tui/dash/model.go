@@ -509,8 +509,12 @@ func (m Model) choose() (tea.Model, tea.Cmd) {
 	choice := m.options[m.pick].value
 	if m.dialog == routeDialog {
 		m.req.Route = choice
-		if choice == agent.Local {
+		if choice == agent.Local || m.req.Agent == claude.Name {
 			m.req.Model = ""
+			if app.NeedsClaudeAck(m.st, m.req) {
+				m.dialog = ackDialog
+				return m, nil
+			}
 			m.busy = "Planning"
 			return m, plan(m.ctx, m.cfg, m.st, m.req)
 		}

@@ -42,9 +42,9 @@ func setup(t *testing.T, settings string) (*config.Config, string) {
 	return cfg, path
 }
 
-func apply(t *testing.T, cfg *config.Config, route, model string) []byte {
+func apply(t *testing.T, cfg *config.Config, route string) []byte {
 	t.Helper()
-	plan, err := PlanUse(cfg, route, model)
+	plan, err := PlanUse(cfg, route)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,10 +59,9 @@ func apply(t *testing.T, cfg *config.Config, route, model string) []byte {
 func TestProxyThenLocalRoundTrip(t *testing.T) {
 	cfg, _ := setup(t, existing)
 
-	got := apply(t, cfg, "spark", "gpt-6.1-sol")
+	got := apply(t, cfg, "spark")
 	for path, want := range map[string]string{
 		"env.ANTHROPIC_BASE_URL":                         "https://spark.example:8445",
-		"env.ANTHROPIC_MODEL":                            "gpt-6.1-sol",
 		"env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
 		"env.DISABLE_ERROR_REPORTING":                    "1",
 		"apiKeyHelper":                                   "/opt/bin/agentctl token spark",
@@ -72,12 +71,15 @@ func TestProxyThenLocalRoundTrip(t *testing.T) {
 			t.Errorf("%s = %q, want %q", path, v, want)
 		}
 	}
+	if gjson.GetBytes(got, "env.ANTHROPIC_MODEL").Exists() {
+		t.Fatal("route switch must not pin ANTHROPIC_MODEL")
+	}
 	st, err := Current(cfg)
-	if err != nil || st.Route != "spark" || st.Model != "gpt-6.1-sol" {
+	if err != nil || st.Route != "spark" || st.Model != "" {
 		t.Fatalf("Current = %+v, %v", st, err)
 	}
 
-	if got := apply(t, cfg, agent.Local, ""); string(got) != existing {
+	if got := apply(t, cfg, agent.Local); string(got) != existing {
 		t.Fatalf("local should restore the original file exactly, got:\n%s", got)
 	}
 	if st, _ := Current(cfg); st.Route != agent.Local {
@@ -87,7 +89,7 @@ func TestProxyThenLocalRoundTrip(t *testing.T) {
 
 func TestLocalRemovesForeignOverrides(t *testing.T) {
 	cfg, _ := setup(t, `{"apiKeyHelper": "vault read key", "env": {"ANTHROPIC_AUTH_TOKEN": "x"}}`)
-	plan, err := PlanUse(cfg, agent.Local, "")
+	plan, err := PlanUse(cfg, agent.Local)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ func TestLocalRemovesForeignOverrides(t *testing.T) {
 
 func TestNoSettingsFileStaysAbsentForLocal(t *testing.T) {
 	cfg, _ := setup(t, "")
-	plan, err := PlanUse(cfg, agent.Local, "")
+	plan, err := PlanUse(cfg, agent.Local)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +114,7 @@ func TestNoSettingsFileStaysAbsentForLocal(t *testing.T) {
 
 func TestInvalidJSONIsRefused(t *testing.T) {
 	cfg, _ := setup(t, `{"theme": `)
-	if _, err := PlanUse(cfg, "spark", ""); err == nil {
+	if _, err := PlanUse(cfg, "spark"); err == nil {
 		t.Fatal("want error for invalid JSON")
 	}
 }
@@ -129,12 +131,30 @@ func TestSymlinkedSettingsStayLinked(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	apply(t, cfg, "spark", "")
+	apply(t, cfg, "spark")
 	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("settings.json is no longer a symlink: %v", err)
 	}
 	b, _ := os.ReadFile(target)
 	if !strings.Contains(string(b), "ANTHROPIC_BASE_URL") {
 		t.Fatal("symlink target was not updated")
+	}
+}
+
+func TestRouteSwitchRemovesModelEnvOverride(t *testing.T) {
+	for _, route := range []string{"spark", agent.Local} {
+		t.Run(route, func(t *testing.T) {
+			cfg, _ := setup(t, `{"model":"gpt-6.1-sol","env":{"ANTHROPIC_MODEL":"Opus 5.5","DISABLE_ERROR_REPORTING":"1"}}`)
+			got := apply(t, cfg, route)
+			if gjson.GetBytes(got, "env.ANTHROPIC_MODEL").Exists() {
+				t.Fatal("stale model env override should be removed")
+			}
+			if gjson.GetBytes(got, "model").String() != "gpt-6.1-sol" {
+				t.Fatal("Claude Code's saved model must be preserved")
+			}
+			if gjson.GetBytes(got, "env.DISABLE_ERROR_REPORTING").String() != "1" {
+				t.Fatal("unrelated env must be preserved")
+			}
+		})
 	}
 }

@@ -68,19 +68,23 @@ func TestCodexModelPickerHidesClaude(t *testing.T) {
 	}
 }
 
-func TestClaudeModelPickerShowsEverythingAndWarnsOnce(t *testing.T) {
+func TestClaudeRouteSkipsModelPicker(t *testing.T) {
 	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded(),
-		keyPress("enter"), keyPress("down"), keyPress("enter"), modelsMsg{route: "spark", list: served})
-	if len(m.options) != 3 {
-		t.Fatalf("want keep-current plus 2 models, got %d", len(m.options))
-	}
-	m = send(t, m, keyPress("down"), keyPress("enter"))
+		keyPress("enter"), keyPress("down"), keyPress("enter"))
 	if m.dialog != ackDialog {
-		t.Fatalf("first Claude proxy route must show the policy warning, dialog = %v", m.dialog)
+		t.Fatalf("Claude proxy route must go straight to the policy warning, dialog = %v", m.dialog)
+	}
+	if m.req.Model != "" {
+		t.Fatalf("route change must not pin a model, got %q", m.req.Model)
 	}
 	m = send(t, m, keyPress("n"))
 	if m.dialog != noDialog {
 		t.Fatalf("declining should close, dialog = %v", m.dialog)
+	}
+	m.st.ClaudeProxyAcknowledged = true
+	m = send(t, m, keyPress("enter"), keyPress("down"), keyPress("enter"))
+	if m.dialog != routeDialog || m.busy != "Planning" {
+		t.Fatalf("acknowledged route should plan without a model picker, dialog %v busy %q", m.dialog, m.busy)
 	}
 }
 
