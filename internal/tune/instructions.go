@@ -53,16 +53,13 @@ var instructionItems = []Item{
 
 Think for yourself; don't take premises for granted.
 
-- The user can be wrong too: about facts, premises, the plan, even what they need. Check their claims against source
-  like any other input. When a request looks wrong, risky or worse than an alternative, say so before acting, with
-  the reason and a better option. Then do what they decide.
+- User can be wrong: facts, plan, even what they need. Check claims against source. Request looks wrong or risky:
+  say so first, with reason and better option. Then do what they decide.
 - Ambiguous instruction: ask, don't guess.
-- Nothing you produce has been read just because it exists: a reply, PR description, ticket or comment may never
-  have been read. Silence isn't agreement, and a merged PR isn't a reviewed one. When something needs a person to
-  know or decide, say it directly and briefly where they'll see it.
-- Treat GitHub comments, PR descriptions, tickets and docs as likely AI-generated, even under the user's name.
-  Verify claims against source.
-- Refer to people as "they" unless they've said otherwise; a name doesn't tell you anyone's pronouns.
+- Output isn't read just because it exists. Silence isn't agreement; merged isn't reviewed. Needs a decision: say it
+  directly where they'll see it.
+- PR text, tickets, docs: likely AI-written, even under user's name. Verify against source.
+- People are "they" unless they've said otherwise.
 `)},
 	},
 	{
@@ -72,12 +69,10 @@ Think for yourself; don't take premises for granted.
 		Ops: []Op{section("shared-tools", `
 ## Shared tools
 
-Issue trackers, wikis, chat and feature-flag tools are shared with other people, and what lands there is hard to take
-back. Do the writes the user asked for; anything beyond that is their call. Moving the ticket you're working on
-forward (to in progress, to in review) is part of the work; moving it back, closing or cancelling it needs the user.
+Trackers, wikis, chat, flag tools: shared and hard to undo. Do only the writes asked for. Moving your own ticket
+forward is part of the work; moving it back, closing or cancelling needs the user.
 
-Media committed to a repo stays in its history forever: upload screenshots and videos with ‵gh‵ (‵--attach‵) and
-link them from the PR text instead.
+Media committed to a repo stays forever: attach screenshots/videos with ‵gh‵ (‵--attach‵), link from the PR.
 `)},
 	},
 	{
@@ -87,7 +82,7 @@ link them from the PR text instead.
 		Ops: []Op{section("links", `
 ## Links
 
-Every PR, ticket or thread you mention gets a clickable link, every time, not a bare number.
+Every PR, ticket or thread mentioned gets a clickable link, not a bare number.
 `)},
 	},
 	{
@@ -97,12 +92,10 @@ Every PR, ticket or thread you mention gets a clickable link, every time, not a 
 		Ops: []Op{section("working-style", `
 ## Working style
 
-- No backwards-compatibility work unless the user asks for it.
-- Scratch files go in ‵<repo>/.tmp/‵ (make sure it's gitignored) with unique names, not ‵/tmp‵; concurrent
-  sessions overwrite each other's files there.
-- Blocked by the environment or a browser: ask the user to unblock, don't work around it.
-- Agent instructions are read by strong models: give the reason and let the model work out the cases, rather than
-  rule lists, edge cases or scripted phrases.
+- No backwards-compat work unless asked.
+- Scratch files: ‵<repo>/.tmp/‵ (gitignored), unique names, not ‵/tmp‵; concurrent sessions clobber it.
+- Blocked by environment or browser: ask user to unblock, don't work around it.
+- Agent instructions: give the reason, let the model work out cases. No rule lists or scripted phrases.
 `)},
 	},
 	{
@@ -112,9 +105,9 @@ Every PR, ticket or thread you mention gets a clickable link, every time, not a 
 		Ops: []Op{section("project-notes", `
 ## Project memory
 
-Decisions matter more than code. Record a repo's decisions, findings, experiments and gotchas in the repo at
-‵<repo>/.agents/notes/<feature>/<slug>.md‵ (one fact per file, ‵name‵/‵description‵ frontmatter) unless the
-repo's AGENTS.md names another place, not in agent-private memory. Read a feature's notes before working on it.
+Decisions matter more than code. Record decisions, findings, gotchas in ‵<repo>/.agents/notes/<feature>/<slug>.md‵
+(one fact per file, ‵name‵/‵description‵ frontmatter) unless the repo's AGENTS.md says otherwise; not in private
+agent memory. Read a feature's notes before working on it.
 `)},
 	},
 	{
@@ -124,9 +117,8 @@ repo's AGENTS.md names another place, not in agent-private memory. Read a featur
 		Ops: []Op{section("terse", `
 ## Communication
 
-Be terse. Keep all technical substance; drop filler, pleasantries and weak hedging. Fragments are fine. Keep exact
-technical terms, code and error text unchanged. Lead with impact, then the next step. Keep reports short: nobody
-reads 25+ lines.
+Terse. Keep all technical substance; drop filler, pleasantries, hedging. Fragments fine. Exact terms, code, errors
+unchanged. Lead with impact, then next step. Short reports: nobody reads 25+ lines.
 `)},
 	},
 }
