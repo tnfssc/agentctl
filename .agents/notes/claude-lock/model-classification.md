@@ -7,7 +7,7 @@ Decided 2026-11-09 (user: soft lock is enough; Claude models must not appear in 
 types a model by hand is on their own).
 
 - Fail safe: a model is non-Anthropic only with positive evidence. Hiding a Gemini model costs one allow line; showing
-  a Claude model breaks the policy. Per-proxy `codex_allow` can clear unknown models but never overrides a positive
+  a Claude model breaks the policy. Per-proxy `allow_models` (`agentctl proxy allow`) can clear unknown models but never overrides a positive
   Claude signal.
 - Normalize first: strip `prefix/` (CPA `force-model-prefix`), `(…)` and `[1m]` suffixes.
 - Claude if: `owned_by == anthropic`; or id/display name matches `\b(claude|anthropic|opus|sonnet|haiku|fable|mythos)\b`.
