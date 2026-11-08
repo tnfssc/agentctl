@@ -9,6 +9,10 @@ GOTOOLCHAIN = "local"
 description = "Build bin/agentctl"
 run = "go build -trimpath -ldflags \"-s -w -X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" -o bin/agentctl ./cmd/agentctl"
 
+[tasks.release-build]
+description = "Build release binaries and SHA256SUMS (pass vX.Y.Z)"
+run = "sh scripts/release-build.sh"
+
 [tasks.install]
 description = "Install agentctl into $GOBIN (~/go/bin)"
 run = "go install -trimpath -ldflags \"-X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" ./cmd/agentctl"

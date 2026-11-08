@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Set through -ldflags at release time; see Makefile.
+// Set through -ldflags at release time; see scripts/release-build.sh.
 var (
 	version = ""
 	commit  = ""

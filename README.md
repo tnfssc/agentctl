@@ -9,11 +9,34 @@ Switch coding agents between their own login and [CLIProxyAPI](https://github.co
 agentctl edits the agents' own config files (`~/.claude/settings.json`, `~/.codex/config.toml`), shows a diff first,
 keeps a backup of every write, and going back to `local` restores the files exactly.
 
+## Install
+
+macOS or Linux, Intel or ARM64:
+
+```sh
+curl -fsSL https://github.com/tnfssc/agentctl/releases/latest/download/install.sh | sh
+```
+
+Downloads the matching binary, verifies its SHA-256 checksum and installs to `~/.local/bin` without sudo.
+Add that directory to your PATH if needed, then run `agentctl`. Run the same command to update.
+
+For a specific version or install directory:
+
+```sh
+curl -fsSL https://github.com/tnfssc/agentctl/releases/latest/download/install.sh \
+  | AGENTCTL_VERSION=v0.1.0 AGENTCTL_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+Or [download a release](https://github.com/tnfssc/agentctl/releases) manually. With Go installed:
+
+```sh
+go install github.com/tnfssc/agentctl/cmd/agentctl@latest
+```
+
 ## Use
 
-Run `agentctl` in a terminal for the dashboard: a neo-brutalist full-screen UI showing where each agent is routed and
-which proxies work. Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh Codex's
-model list; hover, wheel scrolling and dialogs work like a web page.
+Run `agentctl` in a terminal for the dashboard showing where each agent is routed and which proxies work.
+Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh Codex's model list.
 
 The same things from the command line:
 
@@ -53,7 +76,7 @@ cmd/agentctl/          main
 internal/app/          what agentctl does, shared by the CLI and the dashboard
 internal/cli/          cobra commands (fang for help and errors)
 internal/tui/dash/     the dashboard (layered scene, mouse hit testing)
-internal/tui/neo/      the neo-brutalist look: palette, cards, buttons, title, sparkles
+internal/tui/skin/     dashboard palette and UI styles
 internal/agent/        planned file changes: diff, backup, apply
 internal/agent/claude  settings.json routing
 internal/agent/codex   config.toml routing and the filtered model catalog
