@@ -24,7 +24,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/proxy"
-	"github.com/tnfssc/agentctl/internal/tui/neo"
+	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
 )
 
@@ -47,7 +47,9 @@ type option struct {
 	label, detail, value string
 }
 
-const fps = 12
+// fps paces spinners. Frames only tick while something is loading, so an
+// idle dashboard sends nothing to the terminal (and nothing over SSH).
+const fps = 10
 
 type frameMsg struct{}
 
@@ -67,14 +69,23 @@ const (
 	pointerWheel
 )
 
+// Options configure the dashboard.
+type Options struct {
+	// Remote drops hover tracking, for sessions over SSH where every pointer
+	// movement would cost a round trip.
+	Remote bool
+}
+
 // Model is the dashboard's Bubble Tea model.
 type Model struct {
-	ctx    context.Context
-	width  int
-	height int
-	pal    neo.Palette
-	diff   theme.Styles
-	frame  int
+	ctx     context.Context
+	remote  bool
+	ticking bool
+	width   int
+	height  int
+	pal     skin.Palette
+	diff    theme.Styles
+	frame   int
 
 	busy     string
 	cfg      *config.Config
@@ -84,9 +95,8 @@ type Model struct {
 	loaded   bool
 
 	dialog  dialog
-	focus   int    // keyboard focus on the home screen
+	focus   int    // selected sidebar item on the home screen
 	hover   string // element under the mouse
-	scroll  int    // home screen scroll, in rows
 	options []option
 	pick    int
 	top     int // first visible option
@@ -104,9 +114,10 @@ type Model struct {
 }
 
 // New returns the dashboard. ctx bounds all network and file work.
-func New(ctx context.Context) Model {
+func New(ctx context.Context, opts Options) Model {
 	m := Model{
 		ctx:    ctx,
+		remote: opts.Remote,
 		probes: map[string]app.Probe{},
 		vp:     viewport.New(),
 	}
@@ -115,22 +126,53 @@ func New(ctx context.Context) Model {
 }
 
 func (m *Model) setPalette(isDark bool) {
-	m.pal = neo.NewPalette(isDark)
+	m.pal = skin.New(isDark)
 	m.diff = theme.New(isDark)
 }
 
-// Init loads config, asks for the background color and starts animating.
+// Init loads config and asks for the background color.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, load, tick())
+	return tea.Batch(tea.RequestBackgroundColor, load)
+}
+
+// needsFrames reports whether anything on screen is animating.
+func (m Model) needsFrames() bool {
+	if m.busy != "" || !m.loaded {
+		return true
+	}
+	for _, n := range m.cfg.Names() {
+		if _, ok := m.probes[n]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 func tick() tea.Cmd {
 	return tea.Tick(time.Second/fps, func(time.Time) tea.Msg { return frameMsg{} })
 }
 
-// Update handles background results, then pointer and key input for the
-// home screen or the open dialog.
+// Update handles a message, then starts the frame ticker if something began
+// animating and it is not already running.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	nm, ok := next.(Model)
+	if !ok {
+		return next, cmd
+	}
+	if _, ok := msg.(frameMsg); ok {
+		nm.ticking = false // the tick that delivered this frame is spent
+	}
+	if !nm.ticking && nm.needsFrames() {
+		nm.ticking = true
+		cmd = tea.Batch(cmd, tick())
+	}
+	return nm, cmd
+}
+
+// update handles background results, then pointer and key input for the
+// home screen or the open dialog.
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -141,7 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case frameMsg:
 		m.frame++
-		return m, tick()
+		return m, nil
 	case tea.MouseMsg:
 		return m, nil // resolved into pointerMsg by the view's OnMouse
 	case pointerMsg:
@@ -235,7 +277,7 @@ func (m Model) homeIDs() []string {
 func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 	switch p.kind {
 	case pointerMove:
-		m.hover = p.id
+		m.hover = p.id // unchanged ids redraw nothing: the renderer diffs cells
 		return m, nil
 	case pointerWheel:
 		switch m.dialog {
@@ -248,7 +290,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 				m.vp.ScrollDown(3)
 			}
 		case noDialog:
-			m.scroll = max(0, m.scroll+p.wheel*2)
+			m.focus = max(0, min(len(m.homeIDs())-1, m.focus+p.wheel))
 		}
 		return m, nil
 	}
@@ -267,6 +309,21 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 	m.toast = ""
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
+	case "nav":
+		// Clicking a sidebar item selects it; clicking it again opens it.
+		i := slices.Index(m.homeIDs(), arg)
+		if i < 0 {
+			return m, nil
+		}
+		if i != m.focus {
+			m.focus = i
+			return m, nil
+		}
+		return m.act(arg)
+	case "local":
+		m.req = app.Request{Agent: arg, Route: agent.Local}
+		m.busy = "Planning"
+		return m, plan(m.ctx, m.cfg, m.st, m.req)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
 	case "proxy", "details":
@@ -342,9 +399,9 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch k {
 		case "q", "esc":
 			return m, tea.Quit
-		case "up", "left", "k", "h", "shift+tab":
+		case "up", "k", "shift+tab":
 			m.focus = (m.focus - 1 + len(ids)) % len(ids)
-		case "down", "right", "j", "l", "tab":
+		case "down", "j", "tab":
 			m.focus = (m.focus + 1) % len(ids)
 		case "enter", "space":
 			return m.act(ids[m.focus])

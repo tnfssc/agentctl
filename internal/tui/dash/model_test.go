@@ -48,7 +48,7 @@ func loaded() loadedMsg {
 var served = []proxy.Model{{ID: "claude-opus-5-5", OwnedBy: "anthropic"}, {ID: "gpt-6.1-sol", OwnedBy: "openai"}}
 
 func TestCodexModelPickerHidesClaude(t *testing.T) {
-	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded())
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded())
 	m = send(t, m, click("switch:codex"))
 	if m.dialog != routeDialog || m.req.Agent != "codex" {
 		t.Fatalf("dialog %v agent %q", m.dialog, m.req.Agent)
@@ -69,7 +69,7 @@ func TestCodexModelPickerHidesClaude(t *testing.T) {
 }
 
 func TestClaudeModelPickerShowsEverythingAndWarnsOnce(t *testing.T) {
-	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded(),
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 100, Height: 30}, loaded(),
 		keyPress("enter"), keyPress("down"), keyPress("enter"), modelsMsg{route: "spark", list: served})
 	if len(m.options) != 3 {
 		t.Fatalf("want keep-current plus 2 models, got %d", len(m.options))
@@ -85,7 +85,7 @@ func TestClaudeModelPickerShowsEverythingAndWarnsOnce(t *testing.T) {
 }
 
 func TestClickOutsideDialogCloses(t *testing.T) {
-	m := send(t, New(context.Background()), loaded(), click("agent:claude"))
+	m := send(t, New(context.Background(), Options{}), loaded(), click("agent:claude"))
 	if m.dialog != routeDialog {
 		t.Fatalf("dialog = %v", m.dialog)
 	}
@@ -95,13 +95,13 @@ func TestClickOutsideDialogCloses(t *testing.T) {
 }
 
 func TestViewFitsTerminal(t *testing.T) {
-	for _, size := range [][2]int{{60, 24}, {120, 40}} {
-		m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: size[0], Height: size[1]}, loaded())
+	for _, size := range [][2]int{{80, 24}, {120, 40}, {200, 60}} {
+		m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: size[0], Height: size[1]}, loaded())
 		content := m.View().Content
 		if w, h := lipgloss.Size(content); w > size[0] || h > size[1] {
 			t.Errorf("%v: view is %dx%d", size, w, h)
 		}
-		if !strings.Contains(content, "CLAUDE CODE") {
+		if !strings.Contains(content, "Claude Code") {
 			t.Errorf("%v: home is missing agents", size)
 		}
 	}
@@ -110,7 +110,7 @@ func TestViewFitsTerminal(t *testing.T) {
 func TestRemoveRefusedWhileInUse(t *testing.T) {
 	msg := loaded()
 	msg.statuses[1].status.Route = "spark"
-	m := send(t, New(context.Background()), msg, click("rm:spark"))
+	m := send(t, New(context.Background(), Options{}), msg, click("rm:spark"))
 	if m.dialog != removeDialog || m.usedBy("spark") != "Codex" {
 		t.Fatalf("dialog %v usedBy %q", m.dialog, m.usedBy("spark"))
 	}
@@ -121,7 +121,7 @@ func TestRemoveRefusedWhileInUse(t *testing.T) {
 }
 
 func TestAddFormValidatesBeforeChecking(t *testing.T) {
-	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 100, Height: 40}, loaded(), click("add"))
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 100, Height: 40}, loaded(), click("add"))
 	if m.dialog != addDialog {
 		t.Fatalf("dialog = %v", m.dialog)
 	}
@@ -134,7 +134,7 @@ func TestAddFormValidatesBeforeChecking(t *testing.T) {
 // TestMouseHitsElements drives OnMouse with real click coordinates, so the
 // layout and the hit testing stay in agreement.
 func TestMouseHitsElements(t *testing.T) {
-	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
 	v := m.View()
 	found := map[string]bool{}
 	for y := range 40 {
@@ -148,7 +148,7 @@ func TestMouseHitsElements(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"switch:claude", "agent:codex", "test:spark", "rm:spark", "add", "refresh", "quit"} {
+	for _, id := range []string{"nav:agent:claude", "nav:agent:codex", "nav:proxy:spark", "nav:add", "switch:claude", "add", "refresh", "testall", "quit"} {
 		if !found[id] {
 			t.Errorf("no screen cell resolves to %q", id)
 		}
@@ -156,5 +156,39 @@ func TestMouseHitsElements(t *testing.T) {
 	// Clicking the Codex switch button opens its route dialog.
 	if m = send(t, m, click("switch:codex")); m.dialog != routeDialog {
 		t.Fatalf("dialog = %v", m.dialog)
+	}
+}
+
+func TestSidebarClickSelectsThenOpens(t *testing.T) {
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
+	m = send(t, m, click("nav:proxy:spark"))
+	if m.dialog != noDialog || m.homeIDs()[m.focus] != "proxy:spark" {
+		t.Fatalf("first click should select: focus %d dialog %v", m.focus, m.dialog)
+	}
+	if m = send(t, m, click("nav:proxy:spark")); m.dialog != proxyDialog {
+		t.Fatalf("second click should open details, dialog = %v", m.dialog)
+	}
+}
+
+// TestIdleDashboardStopsTicking guards SSH performance: once nothing is
+// loading, frames stop and the dashboard sends nothing.
+func TestIdleDashboardStopsTicking(t *testing.T) {
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 40})
+	if !m.ticking {
+		t.Fatal("loading should animate")
+	}
+	msg := loaded()
+	msg.cfg.Proxies = map[string]config.Proxy{}
+	m = send(t, m, msg)
+	next, cmd := m.Update(frameMsg{})
+	if next.(Model).ticking || cmd != nil {
+		t.Fatal("an idle dashboard must not schedule frames")
+	}
+}
+
+func TestRemoteSessionsSkipHover(t *testing.T) {
+	m := send(t, New(context.Background(), Options{Remote: true}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
+	if m.View().MouseMode != tea.MouseModeCellMotion {
+		t.Fatal("over SSH, only clicks and wheel should be reported")
 	}
 }

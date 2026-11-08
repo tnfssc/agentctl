@@ -23,7 +23,7 @@ func TestSnapshots(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	m := send(t, New(context.Background()), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
 	r := app.Probe{Latency: 23 * time.Millisecond, Models: []proxy.Model{
 		{ID: "claude-opus-5-5", OwnedBy: "anthropic"}, {ID: "gpt-6.1-sol", OwnedBy: "openai"}, {ID: "palmyra-x6", OwnedBy: "WRITER"},
 	}}
@@ -41,6 +41,14 @@ func TestSnapshots(t *testing.T) {
 	hover := m
 	hover.hover = "switch:claude"
 	frames["hover"] = hover
+	selected := m
+	selected.focus = 2
+	frames["selected-proxy"] = selected
+	routed := send(t, m, loadedMsg{cfg: m.cfg, st: m.st, statuses: []agentStatus{
+		m.statuses[0], {agent: m.statuses[1].agent, status: app.Status{Route: "spark", URL: "https://spark.example:8445", Model: "gpt-6.1-sol"}},
+	}})
+	routed.focus = 1
+	frames["routed-codex"] = routed
 
 	for name, f := range frames {
 		out := f.View().Content

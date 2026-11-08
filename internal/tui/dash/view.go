@@ -2,7 +2,7 @@ package dash
 
 import (
 	"fmt"
-	"image/color"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +13,15 @@ import (
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
+	"github.com/tnfssc/agentctl/internal/agent/codex"
 	"github.com/tnfssc/agentctl/internal/models"
-	"github.com/tnfssc/agentctl/internal/tui/neo"
+	"github.com/tnfssc/agentctl/internal/tui/skin"
+)
+
+const (
+	sidebarWidth = 30
+	minWidth     = 72
+	minHeight    = 22
 )
 
 // scene collects absolutely positioned layers; the compositor draws them by
@@ -29,22 +36,18 @@ func (s *scene) add(content string, x, y, z int, id string) {
 	s.layers = append(s.layers, l)
 }
 
-// card adds content with a hard shadow two cells right and one down.
-func (s *scene) card(p neo.Palette, content string, x, y, z int, id string) {
-	w, h := lipgloss.Size(content)
-	s.add(p.Shadow(w, h), x+2, y+1, z, "")
-	s.add(content, x, y, z+1, id)
-}
-
 // View renders the dashboard and resolves mouse events against this frame.
 func (m Model) View() tea.View {
 	sc := &scene{}
 	sc.add(strings.Repeat(strings.Repeat(" ", max(1, m.width))+"\n", max(1, m.height)), 0, 0, 0, "")
-	m.drawHome(sc)
-	if m.dialog != noDialog {
-		m.drawDialog(sc)
+	if m.width < minWidth || m.height < minHeight {
+		sc.add(m.pal.Body(fmt.Sprintf("agentctl needs at least %d×%d; this terminal is %d×%d.", minWidth, minHeight, m.width, m.height), max(10, m.width-4)), 2, 1, 1, "")
+	} else {
+		m.drawPage(sc)
+		if m.dialog != noDialog {
+			m.drawDialog(sc)
+		}
 	}
-	m.drawFooter(sc)
 
 	comp := lipgloss.NewCompositor(sc.layers...)
 	content := comp.Render()
@@ -53,7 +56,12 @@ func (m Model) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	// Hover needs every pointer movement; over SSH that floods the link, so
+	// remote sessions get clicks and the wheel only.
 	v.MouseMode = tea.MouseModeAllMotion
+	if m.remote {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	v.WindowTitle = "agentctl"
 	v.OnMouse = func(msg tea.MouseMsg) tea.Cmd {
 		mouse := msg.Mouse()
@@ -79,237 +87,312 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// active reports whether element id is hovered, or focused by keyboard on
-// the home screen.
-func (m Model) active(id string) bool {
-	if m.hover == id {
-		return true
-	}
-	ids := m.homeIDs()
-	return m.dialog == noDialog && m.focus < len(ids) && ids[m.focus] == id
-}
-
 type button struct {
 	label, id string
-	fill      color.Color
+	primary   bool
 }
 
-func (m Model) drawHome(sc *scene) {
+// buttons lays out a row of buttons from x and returns the x after it.
+func (m Model) buttons(sc *scene, p skin.Palette, bs []button, x, y, z int) int {
+	for _, b := range bs {
+		btn := p.Button(b.label, b.primary, m.hover == b.id)
+		sc.add(btn, x, y, z, b.id)
+		x += lipgloss.Width(btn) + 1
+	}
+	return x
+}
+
+func (m Model) drawPage(sc *scene) {
 	p := m.pal
 	if m.dialog != noDialog {
-		p = p.Dimmed()
-	} else {
-		for _, st := range p.Sparkles(m.width, m.height, m.frame/2, max(6, m.width*m.height/220)) {
-			sc.add(st.Glyph, st.X, st.Y, 1, "")
-		}
+		p = p.Faded()
 	}
-	x, y := 2, 1-m.scroll
-	full := max(30, m.width-6)
+	w, h := m.width, m.height
 
-	// Header: the big shimmering title when there is room, else one line.
-	toolbar := []button{
-		{"REFRESH CODEX", "refresh", p.Cyan},
-		{"TEST PROXIES", "testall", p.Lime},
-		{"QUIT ×", "quit", p.Pink},
-	}
-	bw := 0
-	for _, b := range toolbar {
-		bw = max(bw, lipgloss.Width(b.label)+2)
-	}
-	tagline := p.On(p.Yellow).Render("Route Claude Code and Codex to their own login or a CLIProxyAPI server.")
-	big := m.height >= 36 && full-4 >= neo.TitleWidth
-	var lines []string
-	side := false
-	if big {
-		lines = append(strings.Split(p.Title(p.Yellow, m.frame), "\n"), tagline)
-		side = full-4 >= neo.TitleWidth+bw+6
-	} else {
-		lines = []string{p.SmallTitle(p.Yellow, m.frame) + p.On(p.Yellow).Render("   ") + tagline}
-	}
-	header := p.Card(p.Yellow, p.Ink, full, lines...)
-	sc.card(p, header, x, y, 10, "")
-	if side {
-		for i, b := range toolbar {
-			label := b.label + strings.Repeat(" ", bw-2-lipgloss.Width(b.label))
-			sc.add(p.ButtonOn(p.Yellow, label, b.fill, m.hover == b.id), x+full-bw-4, y+1+i*2, 12, b.id)
-		}
-		y += lipgloss.Height(header) + 2
-	} else {
-		y += lipgloss.Height(header) + 2
-		bx := x
-		for _, b := range toolbar {
-			btn := p.Button(b.label, b.fill, m.hover == b.id)
-			sc.add(btn, bx, y, 12, b.id)
-			bx += lipgloss.Width(btn) + 2
-		}
-		y += 3
-	}
-
-	if !m.loaded {
-		sc.add(p.Text().Render(neo.Spin(m.frame)+" loading"), x, y, 10, "")
-		return
-	}
-
-	// Agents: one card each, side by side when they fit.
-	sc.add(p.Chip("agents", p.Ink)+" "+p.Dim().Render("click a card to choose where it sends requests"), x, y, 10, "")
-	y += 2
-	cols := 1
-	if full >= 2*44+4 {
-		cols = 2
-	}
-	cw := (full - (cols-1)*4) / cols
-	fills := map[string]color.Color{claude.Name: p.Pink, "codex": p.Cyan}
-	for i, as := range m.statuses {
-		m.drawAgent(sc, p, as, fills[as.agent.Name], x+(i%cols)*(cw+4), y+(i/cols)*10, cw)
-	}
-	y += (len(m.statuses) + cols - 1) / cols * 10
-
-	// Proxies: a grid of cards plus an "add" card.
-	sc.add(p.Chip("proxies", p.Ink)+" "+p.Dim().Render("CLIProxyAPI servers you can route to"), x, y, 10, "")
-	y += 2
-	pcols := max(1, (full+4)/44)
-	pw := (full - (pcols-1)*4) / pcols
-	names := m.cfg.Names()
-	for i, n := range names {
-		m.drawProxy(sc, p, n, x+(i%pcols)*(pw+4), y+(i/pcols)*10, pw)
-	}
-	i := len(names)
-	m.drawAddCard(sc, p, x+(i%pcols)*(pw+4), y+(i/pcols)*10, pw)
-}
-
-func (m Model) drawAgent(sc *scene, p neo.Palette, as agentStatus, fill color.Color, x, y, w int) {
-	id := "agent:" + as.agent.Name
-	on := p.On(fill)
-	inner := w - 4
-	name := on.Bold(true).Render(strings.ToUpper(as.agent.Title))
-	var route, detail, note string
-	switch {
-	case as.err != nil:
-		route, detail = p.Chip("error", p.Red), on.Render(as.err.Error())
-	case as.status.Route == agent.Local:
-		route = p.Chip("own login", p.Lime)
-		detail = on.Render("Uses the login " + as.agent.Title + " already has.")
-	default:
-		route = p.Chip("proxy "+as.status.Route, p.Yellow)
-		detail = on.Render("Through " + as.status.Route + " · " + as.status.URL)
-	}
-	if as.status.Model != "" {
-		note = on.Render("model ") + on.Bold(true).Render(as.status.Model)
-	}
-	if len(as.status.Notes) > 0 {
-		note = on.Render("! " + as.status.Notes[0])
-	}
-	gap := on.Render(strings.Repeat(" ", max(1, inner-lipgloss.Width(name)-lipgloss.Width(route))))
-	border := p.Ink
-	if m.active(id) {
-		border = p.Yellow
-	}
-	sc.card(p, p.Card(fill, border, w, name+gap+route, detail, note, "", "", ""), x, y, 20, id)
-	sid := "switch:" + as.agent.Name
-	sc.add(p.ButtonOn(fill, "SWITCH ROUTE →", p.Yellow, m.hover == sid), x+2, y+5, 22, sid)
-}
-
-func (m Model) drawProxy(sc *scene, p neo.Palette, name string, x, y, w int) {
-	id := "proxy:" + name
-	fill := p.Paper
-	on := p.On(fill)
-	inner := w - 4
-	r, checked := m.probes[name]
-	var chip, summary, warn string
-	switch {
-	case !checked:
-		chip, summary = p.Chip(neo.Spin(m.frame)+" checking", p.Yellow), on.Render("Talking to the proxy…")
-	case r.HealthErr != nil:
-		chip, summary = p.Chip("✗ down", p.Red), on.Render(r.HealthErr.Error())
-	case r.ModelsErr != nil:
-		chip, summary = p.Chip("✗ key", p.Red), on.Render(r.ModelsErr.Error())
-	default:
-		chip = p.Chip("✓ live", p.Lime)
-		summary = on.Render(fmt.Sprintf("%d models · %d Claude · %s", len(r.Models), r.Counts.Claude, r.Latency.Round(time.Millisecond)))
-		if len(r.Disguised) > 0 || r.DiscoveryErr != nil || r.SlowDiscovery() {
-			warn = on.Render("! Claude Code may not list models well")
-		}
-	}
-	title := on.Bold(true).Render(strings.ToUpper(name))
-	gap := on.Render(strings.Repeat(" ", max(1, inner-lipgloss.Width(title)-lipgloss.Width(chip))))
-	url := lipgloss.NewStyle().Foreground(lipgloss.Color("#5E5A52")).Background(fill).Render(m.cfg.Proxies[name].URL)
-	border := p.Ink
-	if m.active(id) {
-		border = p.Pink
-	}
-	sc.card(p, p.Card(fill, border, w, title+gap+chip, url, summary, warn, "", ""), x, y, 20, id)
-	bx := x + 2
-	for _, b := range []button{
-		{"TEST", "test:" + name, p.Lime}, {"DETAILS", "details:" + name, p.Cyan}, {"REMOVE", "rm:" + name, p.Red},
+	// Nav: wordmark, text links, status pill.
+	sc.add(p.Wordmark(), 2, 2, 1, "")
+	x := 20
+	for _, l := range []struct{ label, id string }{
+		{"Add proxy", "add"}, {"Test proxies", "testall"}, {"Refresh Codex", "refresh"}, {"Quit", "quit"},
 	} {
-		btn := p.ButtonOn(fill, b.label, b.fill, m.hover == b.id)
-		sc.add(btn, bx, y+5, 22, b.id)
-		bx += lipgloss.Width(btn) + 1
+		style := skin.Fg(p.Muted)
+		if m.hover == l.id {
+			style = skin.Fg(p.Text).Underline(true)
+		}
+		sc.add(style.Render(l.label), x, 2, 1, l.id)
+		x += lipgloss.Width(l.label) + 4
 	}
-}
+	pill := m.pill(p)
+	if px := w - lipgloss.Width(pill) - 2; px > x {
+		sc.add(pill, px, 1, 1, "")
+	}
+	sc.add(p.HLine(w), 0, 4, 1, "")
 
-func (m Model) drawAddCard(sc *scene, p neo.Palette, x, y, w int) {
-	fill := p.Violet
-	on := p.On(fill)
-	border := p.Ink
-	if m.active("add") {
-		border = p.Yellow
-	}
-	plus := "+"
-	if m.frame/6%2 == 0 {
-		plus = "*"
-	}
-	card := p.Card(fill, border, w,
-		on.Bold(true).Render(plus+"  ADD A PROXY"),
-		on.Render("A URL and an API key; agentctl checks"),
-		on.Render("that it answers before saving it."), "", "", "")
-	sc.card(p, card, x, y, 20, "add")
-	sc.add(p.ButtonOn(fill, "ADD →", p.Yellow, m.hover == "add-btn"), x+2, y+5, 22, "add-btn")
-}
+	// Body: sidebar, hairline, detail.
+	top, bottom := 5, h-3
+	sc.add(p.VLine(bottom-top+1), sidebarWidth, top, 1, "")
+	m.drawSidebar(sc, p, top)
+	m.drawDetail(sc, p, top)
 
-func (m Model) drawFooter(sc *scene) {
-	p := m.pal
-	var hints string
-	switch m.dialog {
-	case noDialog:
-		hints = "click, or ←/→ + enter · a add · t test · r refresh Codex · d remove · wheel scrolls · q quit"
-	case routeDialog, modelDialog:
-		hints = "click a row, or ↑/↓ + enter · esc back"
-	case confirmDialog:
-		hints = "y apply · n cancel · wheel or ↑/↓ scrolls"
-	case addDialog:
-		hints = "tab next field · enter submit · esc cancel"
-	case proxyDialog:
-		hints = "t test again · d remove · wheel scrolls · esc close"
-	default:
-		hints = "y yes · n no"
-	}
-	sc.add(p.Dim().Render(ansi.Truncate(hints, max(1, m.width-4), "…")), 2, m.height-1, 100, "")
-
-	var toast string
+	// Footer: status message on the left, key hints on the right.
+	sc.add(p.HLine(w), 0, h-2, 1, "")
+	var status string
 	switch {
 	case m.busy != "":
-		toast = p.On(p.Yellow).Bold(true).Render(" " + neo.Spin(m.frame) + " " + m.busy + "… ")
+		status = skin.Fg(p.Accent).Render(skin.Spin(m.frame)+" ") + skin.Fg(p.Text).Render(m.busy+"…")
 	case m.toast != "" && m.toastErr:
-		toast = p.On(p.Red).Bold(true).Render(" ✗ " + m.toast + " ")
+		status = skin.Fg(p.Red).Render("✗ ") + skin.Fg(p.Text).Render(m.toast)
 	case m.toast != "":
-		toast = p.On(p.Lime).Bold(true).Render(" ✓ " + m.toast + " ")
+		status = skin.Fg(p.Green).Render("✓ ") + skin.Fg(p.Text).Render(m.toast)
 	}
-	if toast != "" {
-		sc.card(p, ansi.Truncate(toast, max(1, m.width-8), "…"), 2, m.height-4, 98, "")
+	hints := skin.Fg(p.Dim).Render(m.hints())
+	room := w - 4 - lipgloss.Width(hints) - 2
+	if room < 20 {
+		hints, room = "", w-4
 	}
+	sc.add(ansi.Truncate(status, room, "…"), 2, h-1, 1, "")
+	if hints != "" {
+		sc.add(hints, w-2-lipgloss.Width(hints), h-1, 1, "")
+	}
+}
+
+func (m Model) hints() string {
+	switch m.dialog {
+	case noDialog:
+		return "↑↓ select · enter open · click anything · q quit"
+	case routeDialog, modelDialog:
+		return "↑↓ · enter choose · esc back"
+	case confirmDialog:
+		return "y apply · n cancel · scroll"
+	case addDialog:
+		return "tab next · enter submit · esc cancel"
+	case proxyDialog:
+		return "t test · d remove · esc close"
+	default:
+		return "y yes · n no"
+	}
+}
+
+// pill summarizes proxy health like the site's "prod server / running".
+func (m Model) pill(p skin.Palette) string {
+	if !m.loaded {
+		return p.Pill(p.Amber, "agentctl", "loading")
+	}
+	total := len(m.cfg.Proxies)
+	if total == 0 {
+		return p.Pill(p.Dim, "proxies", "none yet")
+	}
+	live, checking := 0, 0
+	for _, n := range m.cfg.Names() {
+		r, ok := m.probes[n]
+		switch {
+		case !ok:
+			checking++
+		case r.Err() == nil:
+			live++
+		}
+	}
+	noun := "proxies"
+	if total == 1 {
+		noun = "proxy"
+	}
+	switch {
+	case checking > 0:
+		return p.Pill(p.Amber, fmt.Sprintf("%d %s", total, noun), "checking")
+	case live == total:
+		return p.Pill(p.Green, fmt.Sprintf("%d %s", total, noun), "live")
+	case live == 0:
+		return p.Pill(p.Red, fmt.Sprintf("%d %s", total, noun), "down")
+	default:
+		return p.Pill(p.Amber, fmt.Sprintf("%d/%d %s", live, total, noun), "live")
+	}
+}
+
+func (m Model) drawSidebar(sc *scene, p skin.Palette, top int) {
+	if !m.loaded {
+		sc.add(skin.Fg(p.Dim).Render(skin.Spin(m.frame)+" loading"), 2, top+1, 1, "")
+		return
+	}
+	rw := sidebarWidth - 3
+	ids := m.homeIDs()
+	selected := ""
+	if m.focus < len(ids) {
+		selected = ids[m.focus]
+	}
+	y := top + 1
+	row := func(id, icon, label, detail string) {
+		sc.add(p.Row(icon, label, detail, rw, id == selected, m.hover == "nav:"+id), 2, y, 2, "nav:"+id)
+		y++
+	}
+	sc.add(p.Label("Agents"), 3, y, 1, "")
+	y += 2
+	for _, as := range m.statuses {
+		detail := "own login"
+		if as.status.Route != agent.Local {
+			detail = "→ " + as.status.Route
+		}
+		row("agent:"+as.agent.Name, "◆", as.agent.Title, detail)
+	}
+	y++
+	sc.add(p.Label("Proxies"), 3, y, 1, "")
+	y += 2
+	for _, n := range m.cfg.Names() {
+		row("proxy:"+n, m.proxyDot(p, n), n, "")
+	}
+	row("add", "+", "Add a proxy", "")
+}
+
+// proxyDot is a colored status dot for a proxy.
+func (m Model) proxyDot(p skin.Palette, name string) string {
+	r, ok := m.probes[name]
+	switch {
+	case !ok:
+		return skin.Fg(p.Amber).Render("●")
+	case r.Err() != nil:
+		return skin.Fg(p.Red).Render("●")
+	default:
+		return skin.Fg(p.Green).Render("●")
+	}
+}
+
+// drawDetail renders the selected item: label, heading, body, buttons and
+// a few facts.
+func (m Model) drawDetail(sc *scene, p skin.Palette, top int) {
+	if !m.loaded {
+		return
+	}
+	left := sidebarWidth + 4
+	textW := min(72, m.width-left-4)
+	d := m.detail(p)
+	y := top + 1
+	sc.add(p.Label(d.label), left, y, 2, "")
+	y += 2
+	sc.add(ansi.Truncate(p.Heading(d.heading), textW, "…"), left, y, 2, "")
+	y += 2
+	body := p.Body(d.body, textW)
+	sc.add(body, left, y, 2, "")
+	y += lipgloss.Height(body) + 1
+	m.buttons(sc, p, d.buttons, left, y, 2)
+	y += 4
+	for _, f := range d.facts {
+		sc.add(ansi.Truncate(f, textW, "…"), left, y, 2, "")
+		y++
+	}
+}
+
+// detailView is what the right side shows for the selected sidebar item.
+type detailView struct {
+	label, heading, body string
+	buttons              []button
+	facts                []string
+}
+
+func (m Model) detail(p skin.Palette) detailView {
+	ids := m.homeIDs()
+	id := ids[min(m.focus, len(ids)-1)]
+	kind, name, _ := strings.Cut(id, ":")
+	switch kind {
+	case "agent":
+		return m.agentDetail(p, m.statusOf(name))
+	case "proxy":
+		return m.proxyDetail(p, name)
+	}
+	return detailView{
+		label:   "Proxy · new",
+		heading: "Add a CLIProxyAPI server",
+		body:    "A URL and one of the proxy's client API keys. agentctl checks the proxy answers before saving it.",
+		buttons: []button{{"Add proxy", "add", true}},
+	}
+}
+
+func fact(p skin.Palette, k, v string) string {
+	return skin.Fg(p.Dim).Render(fmt.Sprintf("%-8s", k)) + skin.Fg(p.Muted).Render(v)
+}
+
+func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
+	title := as.agent.Title
+	d := detailView{label: "Agent · " + title}
+	path, _ := claude.SettingsPath()
+	if as.agent.Name == codex.Name {
+		path, _ = codex.ConfigPath()
+	}
+	switch {
+	case as.err != nil:
+		d.heading = "Can't read its config"
+		d.body = as.err.Error()
+	case as.status.Route == agent.Local:
+		d.heading = "Uses its own login"
+		d.body = "Requests use the account " + title + " is logged in with."
+		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}}
+	default:
+		d.heading = "Routed through " + as.status.Route
+		d.body = "Requests use the accounts logged in on " + as.status.Route + "."
+		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}, {"Use own login", "local:" + as.agent.Name, false}}
+		if as.agent.Name == codex.Name {
+			d.buttons = append(d.buttons, button{"Refresh models", "refresh", false})
+		}
+	}
+	if as.status.Model != "" {
+		d.facts = append(d.facts, fact(p, "model", as.status.Model))
+	}
+	d.facts = append(d.facts, fact(p, "config", tildePath(path)))
+	for _, n := range as.status.Notes {
+		d.facts = append(d.facts, skin.Fg(p.Amber).Render("! "+n))
+	}
+	return d
+}
+
+func (m Model) proxyDetail(p skin.Palette, name string) detailView {
+	d := detailView{
+		label:   "Proxy · " + name,
+		body:    "Agents routed here use the accounts logged in on this server.",
+		buttons: []button{{"Test", "test:" + name, true}, {"Details", "details:" + name, false}, {"Remove", "rm:" + name, false}},
+		facts:   []string{fact(p, "url", m.cfg.Proxies[name].URL)},
+	}
+	if who := m.usedBy(name); who != "" {
+		d.facts = append(d.facts, fact(p, "used by", who))
+	}
+	r, ok := m.probes[name]
+	switch {
+	case !ok:
+		d.heading = "Checking…"
+	case r.HealthErr != nil:
+		d.heading = "Unreachable"
+		d.facts = append(d.facts, skin.Fg(p.Red).Render("✗ "+r.HealthErr.Error()))
+	case r.ModelsErr != nil:
+		d.heading = "Key rejected"
+		d.facts = append(d.facts, skin.Fg(p.Red).Render("✗ "+r.ModelsErr.Error()))
+	default:
+		d.heading = fmt.Sprintf("Live · %d models", len(r.Models))
+		d.facts = append(d.facts,
+			fact(p, "latency", r.Latency.Round(time.Millisecond).String()),
+			fact(p, "models", fmt.Sprintf("%d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown)))
+		if len(r.Disguised) > 0 || r.DiscoveryErr != nil || r.SlowDiscovery() {
+			d.facts = append(d.facts, skin.Fg(p.Amber).Render("! Claude Code may not list this proxy's models well; see Details"))
+		}
+	}
+	return d
+}
+
+var homeDir = os.UserHomeDir
+
+func tildePath(path string) string {
+	if home, err := homeDir(); err == nil && strings.HasPrefix(path, home) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return path
 }
 
 // Dialogs -------------------------------------------------------------------
 
-func (m Model) dialogWidth() int { return max(40, min(96, m.width-8)) }
+func (m Model) dialogWidth() int { return max(48, min(88, m.width-10)) }
 
 // listRows is how many options a pick dialog shows at once.
 func (m Model) listRows() int { return max(3, min(len(m.options), m.height-18)) }
 
 // sizeDialog fits the viewport and inputs to the dialog.
 func (m *Model) sizeDialog() {
-	w := m.dialogWidth() - 4
+	w := m.dialogWidth() - 6
 	m.vp.SetWidth(w)
 	m.vp.SetHeight(max(5, m.height-18))
 	for i := range m.inputs {
@@ -317,39 +400,50 @@ func (m *Model) sizeDialog() {
 	}
 }
 
-// panel draws a dialog with body lines and buttons along its bottom, and
-// returns where the body starts so callers can overlay clickable rows.
-func (m Model) panel(sc *scene, fill color.Color, title string, body []string, buttons []button) (bx, by int) {
+// panel draws a dialog: label and heading, body lines, buttons on the right
+// of the last row. It returns where the body starts so callers can overlay
+// clickable rows.
+func (m Model) panel(sc *scene, label, heading string, body []string, buttons []button) (bx, by int) {
 	p := m.pal
 	w := m.dialogWidth()
-	lines := append([]string{""}, body...)
-	lines = append(lines, "", "", "")
-	content := p.Panel(w, fill, title, lines)
+	inner := w - 6
+	lines := []string{p.Label(label), "", p.Heading(heading), ""}
+	lines = append(lines, body...)
+	lines = append(lines, "", "", "", "")
+	for i, l := range lines {
+		l = ansi.Truncate(l, inner, "…")
+		lines[i] = l + strings.Repeat(" ", max(0, inner-lipgloss.Width(l)))
+	}
+	content := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Strong).Padding(1, 2).
+		Render(strings.Join(lines, "\n"))
 	h := lipgloss.Height(content)
-	x, y := (m.width-w)/2, max(1, (m.height-h)/2-1)
-	sc.card(p, content, x, y, 50, "m:panel")
-	sc.add(p.On(fill).Bold(true).Render(" × "), x+w-5, y+1, 52, "m:close")
+	x, y := (m.width-w)/2, max(1, (m.height-h)/2)
+	sc.add(content, x, y, 50, "m:panel")
+	closeStyle := skin.Fg(p.Dim)
+	if m.hover == "m:close" {
+		closeStyle = skin.Fg(p.Text)
+	}
+	sc.add(closeStyle.Render("×"), x+w-4, y+2, 52, "m:close")
 	right := x + w - 3
 	for i := len(buttons) - 1; i >= 0; i-- {
-		b := buttons[i]
-		btn := p.Button(b.label, b.fill, m.hover == b.id)
+		btn := p.Button(buttons[i].label, buttons[i].primary, m.hover == buttons[i].id)
 		right -= lipgloss.Width(btn)
-		sc.add(btn, right, y+h-4, 52, b.id)
-		right -= 2
+		sc.add(btn, right, y+h-5, 52, buttons[i].id)
+		right--
 	}
-	return x + 2, y + 3
+	return x + 3, y + 6
 }
 
 func (m Model) drawDialog(sc *scene) {
 	p := m.pal
 	switch m.dialog {
 	case routeDialog, modelDialog:
-		heading := "Route " + title(m.req.Agent) + " to"
-		buttons := []button{{"CANCEL", "m:cancel", p.Pink}}
-		var note string
+		label, heading := "Route · "+title(m.req.Agent), "Where should "+title(m.req.Agent)+" send requests?"
+		buttons := []button{{"Cancel", "m:cancel", false}}
+		note := ""
 		if m.dialog == modelDialog {
-			heading = "Model on " + m.req.Route
-			buttons = []button{{"← BACK", "m:back", p.Cyan}, {"CANCEL", "m:cancel", p.Pink}}
+			label, heading = "Model · "+m.req.Route, "Which model on "+m.req.Route+"?"
+			buttons = []button{{"Back", "m:back", false}, {"Cancel", "m:cancel", false}}
 			note = "Claude models are only offered to Claude Code."
 			if m.req.Agent == claude.Name {
 				note = "Any model on the proxy works in Claude Code."
@@ -358,38 +452,38 @@ func (m Model) drawDialog(sc *scene) {
 		rows := m.listRows()
 		body := make([]string, rows+1)
 		if note != "" {
-			body = append([]string{p.Dim().Render(note), ""}, body...)
+			body = append([]string{skin.Fg(p.Muted).Render(note), ""}, body...)
 		}
-		bx, by := m.panel(sc, p.Yellow, heading, body, buttons)
+		bx, by := m.panel(sc, label, heading, body, buttons)
 		if note != "" {
 			by += 2
 		}
 		m.drawOptions(sc, bx, by, rows)
 	case ackDialog:
-		body := strings.Split(p.Text().Render(lipgloss.Wrap(claude.PolicyWarning, m.dialogWidth()-6, "")), "\n")
-		body = append(body, "", p.Text().Bold(true).Render("Route Claude Code through "+m.req.Route+" anyway? You will not be asked again."))
-		m.panel(sc, p.Red, "Heads up: Anthropic's terms", body, []button{
-			{"CANCEL", "m:cancel", p.Cyan}, {"I UNDERSTAND, CONTINUE", "m:ack", p.Yellow},
+		body := strings.Split(p.Body(claude.PolicyWarning, m.dialogWidth()-6), "\n")
+		body = append(body, "", skin.Fg(p.Text).Render("You will only be asked once."))
+		m.panel(sc, "Heads up", "Anthropic's terms and proxies", body, []button{
+			{"Cancel", "m:cancel", false}, {"Continue", "m:ack", true},
 		})
 	case confirmDialog:
-		body := append([]string{p.Dim().Render("Every file is backed up to ~/.config/agentctl/backups first."), ""}, strings.Split(m.vp.View(), "\n")...)
-		m.panel(sc, p.Lime, "Apply to "+title(m.plan.Agent)+"?", body, []button{
-			{"CANCEL", "m:cancel", p.Pink}, {"APPLY ✓", "m:apply", p.Lime},
+		body := append([]string{skin.Fg(p.Muted).Render("Every file is backed up to ~/.config/agentctl/backups first."), ""}, strings.Split(m.vp.View(), "\n")...)
+		m.panel(sc, "Review · "+title(m.plan.Agent), "Apply these changes?", body, []button{
+			{"Cancel", "m:cancel", false}, {"Apply", "m:apply", true},
 		})
 	case proxyDialog:
-		m.panel(sc, p.Cyan, "Proxy "+m.proxy, strings.Split(m.vp.View(), "\n"), []button{
-			{"TEST AGAIN", "m:test", p.Lime}, {"REMOVE", "m:rm", p.Red}, {"CLOSE", "m:close", p.Yellow},
+		m.panel(sc, "Proxy · "+m.proxy, "Health and models", strings.Split(m.vp.View(), "\n"), []button{
+			{"Test again", "m:test", false}, {"Remove", "m:rm", false}, {"Close", "m:close", true},
 		})
 	case removeDialog:
 		if who := m.usedBy(m.proxy); who != "" {
-			m.panel(sc, p.Yellow, "Can't remove "+m.proxy, []string{
-				p.Text().Render(who + " is routed to " + m.proxy + ". Switch it to another route first."),
-			}, []button{{"OK", "m:close", p.Yellow}})
+			m.panel(sc, "Proxy · "+m.proxy, "Still in use", []string{
+				skin.Fg(p.Muted).Render(who + " routes through " + m.proxy + ". Switch it to another route first."),
+			}, []button{{"OK", "m:close", true}})
 			return
 		}
-		m.panel(sc, p.Red, "Remove "+m.proxy+"?", []string{
-			p.Text().Render("agentctl forgets this proxy and its key. Nothing changes on the server."),
-		}, []button{{"CANCEL", "m:cancel", p.Cyan}, {"REMOVE", "m:remove", p.Red}})
+		m.panel(sc, "Proxy · "+m.proxy, "Remove "+m.proxy+"?", []string{
+			skin.Fg(p.Muted).Render("agentctl forgets this proxy and its key. Nothing changes on the server."),
+		}, []button{{"Cancel", "m:cancel", false}, {"Remove", "m:remove", true}})
 	case addDialog:
 		m.drawAddForm(sc)
 	}
@@ -397,7 +491,7 @@ func (m Model) drawDialog(sc *scene) {
 
 func (m Model) drawOptions(sc *scene, x, y, rows int) {
 	p := m.pal
-	w := m.dialogWidth() - 4
+	w := m.dialogWidth() - 6
 	labelW := 0
 	for _, o := range m.options {
 		labelW = max(labelW, lipgloss.Width(o.label))
@@ -409,51 +503,35 @@ func (m Model) drawOptions(sc *scene, x, y, rows int) {
 		}
 		o := m.options[i]
 		id := "m:opt:" + strconv.Itoa(i)
-		label := fmt.Sprintf(" %-*s  ", labelW, o.label)
-		var row string
-		switch {
-		case i == m.pick:
-			on := p.On(p.Yellow)
-			row = p.Line(p.Yellow, w, on.Bold(true).Render("›"+label), on.Render(o.detail))
-		case m.hover == id:
-			on := p.On(p.Cyan)
-			row = p.Line(p.Cyan, w, on.Render(" "+label), on.Render(o.detail))
-		default:
-			row = ansi.Truncate(p.Text().Render(" "+label)+p.Dim().Render(o.detail), w, "…")
-			row += strings.Repeat(" ", max(0, w-lipgloss.Width(row)))
-		}
-		sc.add(row, x, y+r, 53, id)
+		label := fmt.Sprintf("%-*s", labelW, o.label)
+		sc.add(p.Row("›", label, o.detail, w, i == m.pick, m.hover == id), x, y+r, 53, id)
 	}
 	if more := len(m.options) - m.top - rows; more > 0 {
-		sc.add(p.Dim().Render(fmt.Sprintf(" ↓ %d more (wheel or ↓)", more)), x, y+rows, 53, "")
+		sc.add(skin.Fg(p.Dim).Render(fmt.Sprintf("  ↓ %d more", more)), x, y+rows, 53, "")
 	}
 }
 
 func (m Model) drawAddForm(sc *scene) {
 	p := m.pal
 	labels := []string{"Name", "URL", "API key"}
-	hints := []string{
-		"a short name you will type, e.g. spark",
-		"where the proxy listens, e.g. its Tailscale serve URL",
-		"a client key from the proxy's config; kept in ~/.config/agentctl",
-	}
+	hints := []string{"a short name, e.g. spark", "e.g. its Tailscale serve URL", "a client key from the proxy's config"}
 	var body []string
 	for i := range labels {
-		body = append(body, p.Text().Bold(true).Render(labels[i])+"  "+p.Dim().Render(hints[i]), "", "", "")
+		body = append(body, skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), "", "", "")
 	}
 	if m.formErr != "" {
-		body = append(body, lipgloss.NewStyle().Foreground(p.Red).Render("✗ "+m.formErr))
+		body = append(body, skin.Fg(p.Red).Render("✗ "+m.formErr))
 	}
-	bx, by := m.panel(sc, p.Violet, "Add a proxy", body, []button{
-		{"CANCEL", "m:cancel", p.Pink}, {"CHECK & ADD →", "m:submit", p.Lime},
+	bx, by := m.panel(sc, "Proxy · new", "Add a CLIProxyAPI server", body, []button{
+		{"Cancel", "m:cancel", false}, {"Check and add", "m:submit", true},
 	})
-	w := m.dialogWidth() - 6
+	w := m.dialogWidth() - 8
 	for i, in := range m.inputs {
-		border := p.Muted
+		border := p.Line
 		if i == m.field {
-			border = p.Pink
+			border = p.Accent
 		}
-		box := lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(border).Width(w).Render(in.View())
+		box := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Width(w).Render(in.View())
 		sc.add(box, bx, by+i*4+1, 53, "m:input:"+strconv.Itoa(i))
 	}
 }
@@ -462,16 +540,14 @@ func (m Model) drawAddForm(sc *scene) {
 func (m Model) proxyReport(name string) string {
 	p := m.pal
 	px := m.cfg.Proxies[name]
-	ok := lipgloss.NewStyle().Foreground(p.Lime)
-	bad := lipgloss.NewStyle().Foreground(p.Red)
-	warn := lipgloss.NewStyle().Foreground(p.Yellow)
+	ok, bad, warn := skin.Fg(p.Green), skin.Fg(p.Red), skin.Fg(p.Amber)
 	width := max(20, m.vp.Width())
 	var b strings.Builder
-	b.WriteString(p.Dim().Render(px.URL) + "\n\n")
+	b.WriteString(skin.Fg(p.Dim).Render(px.URL) + "\n\n")
 	r, checked := m.probes[name]
 	switch {
 	case !checked:
-		b.WriteString(neo.Spin(m.frame) + " checking…")
+		b.WriteString(skin.Spin(m.frame) + " checking…")
 		return b.String()
 	case r.HealthErr != nil:
 		b.WriteString(bad.Render(lipgloss.Wrap("✗ unreachable: "+r.HealthErr.Error(), width, "")))
@@ -480,7 +556,7 @@ func (m Model) proxyReport(name string) string {
 		b.WriteString(bad.Render("✗ " + r.ModelsErr.Error()))
 		return b.String()
 	}
-	b.WriteString(ok.Render(fmt.Sprintf("✓ healthy (%s), key accepted", r.Latency.Round(time.Millisecond))) + "\n")
+	b.WriteString(ok.Render("✓ ") + skin.Fg(p.Muted).Render(fmt.Sprintf("healthy (%s), key accepted", r.Latency.Round(time.Millisecond))) + "\n")
 	switch {
 	case r.DiscoveryErr != nil:
 		b.WriteString(warn.Render(lipgloss.Wrap("! Claude Code's /model list will not show proxy models: "+r.DiscoveryErr.Error(), width, "")) + "\n")
@@ -489,9 +565,9 @@ func (m Model) proxyReport(name string) string {
 	case len(r.Disguised) > 0:
 		b.WriteString(warn.Render(lipgloss.Wrap(fmt.Sprintf("! Claude Code sees %d non-Claude models under disguised names (e.g. %s); set disable-cloaking-model-list on the proxy to show real names", len(r.Disguised), r.Disguised[0]), width, "")) + "\n")
 	default:
-		b.WriteString(ok.Render("✓ Claude Code sees the proxy's models under their real names") + "\n")
+		b.WriteString(ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code sees the proxy's models under their real names") + "\n")
 	}
-	b.WriteString("\n" + p.Chip(fmt.Sprintf("models · %d claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown), p.Ink) + "\n")
+	b.WriteString("\n" + p.Label(fmt.Sprintf("Models · %d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown)) + "\n\n")
 	idW := 0
 	for _, pm := range r.Models {
 		idW = max(idW, len(pm.ID))
@@ -500,13 +576,13 @@ func (m Model) proxyReport(name string) string {
 		var who string
 		switch models.Classify(pm.ID, pm.OwnedBy, px.AllowModels) {
 		case models.Anthropic:
-			who = lipgloss.NewStyle().Foreground(p.Pink).Render("Claude Code only")
+			who = skin.Fg(p.Accent).Render("Claude Code only")
 		case models.Other:
-			who = ok.Render("all agents")
+			who = skin.Fg(p.Blue).Render("all agents")
 		default:
 			who = warn.Render("unverified · agentctl proxy allow " + name + " " + pm.ID)
 		}
-		b.WriteString(p.Text().Render(fmt.Sprintf("%-*s  ", idW, pm.ID)) + p.Dim().Render(fmt.Sprintf("%-12s ", pm.OwnedBy)) + who + "\n")
+		b.WriteString(skin.Fg(p.Text).Render(fmt.Sprintf("%-*s  ", idW, pm.ID)) + skin.Fg(p.Dim).Render(fmt.Sprintf("%-12s ", pm.OwnedBy)) + who + "\n")
 	}
 	return b.String()
 }

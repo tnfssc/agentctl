@@ -33,17 +33,13 @@ errors styled to stderr. Commands write through `cmd.OutOrStdout()` so tests can
   stderr, only when stdin and stdout are terminals, otherwise commands need `--yes`.
 - Styles come from `internal/tui/theme`.
 
-## Dashboard look
+## Dashboard
 
-The dashboard is neo-brutalist (user's request): loud flat fills, thick ink borders, hard offset shadows, press-in
-buttons, a shimmering title, sparkles, mouse click/hover/wheel. It is a scene of absolutely positioned Lip Gloss
-layers; clickable layers carry IDs and `View().OnMouse` hit-tests the same compositor. Lip Gloss resets styles after
-every span, so text inside a filled shape must carry the fill (`neo.Palette.On`), or it shows holes.
-
-To look at frames: `AGENTCTL_SNAPSHOTS=.tmp/snaps go test ./internal/tui/dash -run TestSnapshots`, then render with
-`mise exec ubi:charmbracelet/freeze@latest -- freeze --language ansi ...`. freeze drops the foreground color after a
-standalone bold code (`ESC[1m`), which the compositor emits; strip bold codes first or bold labels look gray. Real
-terminals render them correctly. tmux `capture-pane -e` also loses attributes; don't judge colors from it.
+Bare `agentctl` opens a small dashboard (`internal/tui/dash`, look in `internal/tui/skin`, after voidzero.dev):
+hairlines, a sidebar, a detail pane, outlined buttons, mouse click/hover/wheel via `View().OnMouse` and compositor
+hit testing. Keep it simple and cheap over SSH: nothing animates except spinners while loading, an idle dashboard
+schedules no frames, and SSH sessions get no hover tracking. Lip Gloss resets styles after every span, so text inside
+a filled shape must carry the fill (`skin.On`).
 
 ## Verifying interactive flows by hand
 
