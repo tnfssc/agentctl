@@ -126,13 +126,6 @@ func Inspect(agentName string) ([]Status, error) {
 		}
 		out[i] = st
 	}
-	if agentName == Instructions && len(out) > 0 {
-		_, notes, err := linkChanges(s.path)
-		if err != nil {
-			return nil, err
-		}
-		out[0].Notes = append(out[0].Notes, notes...)
-	}
 	return out, nil
 }
 
@@ -188,41 +181,65 @@ func Plan(agentName string, want map[string]bool) (agent.Plan, error) {
 	shellChanges, notes := s.shell.changes()
 	plan.Changes = append(plan.Changes, shellChanges...)
 	plan.Warnings = append(plan.Warnings, notes...)
-	if s.agent == Instructions && len(bytes.TrimSpace(after)) > 0 {
-		links, notes, err := linkChanges(s.path)
+	if s.agent == Instructions {
+		links, err := linkChanges(s.path, strings.Contains(string(after), "<!-- agentctl:"))
 		if err != nil {
 			return agent.Plan{}, err
 		}
 		plan.Changes = append(plan.Changes, links...)
-		plan.Warnings = append(plan.Warnings, notes...)
 	}
 	return plan, nil
 }
 
-// linkChanges links each agent's global instructions file to path when it
-// doesn't exist yet. A file that exists and isn't that link is the user's;
-// it is left alone with a note.
-func linkChanges(path string) ([]agent.Change, []string, error) {
+// linkChanges makes Claude Code read path while agentctl manages sections
+// in it (want), and undoes that when it manages none. A missing CLAUDE.md
+// becomes a link to path; an existing one keeps its text and gets a marked
+// import line, which Claude Code loads from user-level files without asking.
+func linkChanges(path string, want bool) ([]agent.Change, error) {
 	links, err := instructionLinks()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var (
-		changes []agent.Change
-		notes   []string
-	)
+	var changes []agent.Change
 	for _, l := range links {
 		target, err := os.Readlink(l)
-		switch {
-		case err == nil && target == path:
-		case errors.Is(err, os.ErrNotExist):
-			changes = append(changes, agent.Change{Path: l, Link: path})
-		default:
-			notes = append(notes, fmt.Sprintf("%s is a separate file, so that agent won't read %s; "+
-				"move its contents there and replace it with a link", l, path))
+		if err == nil && target == path {
+			continue // already reads path
+		}
+		before, err := agent.ReadFile(l)
+		if err != nil {
+			return nil, err
+		}
+		if before == nil {
+			if want {
+				changes = append(changes, agent.Change{Path: l, Link: path})
+			}
+			continue
+		}
+		doc := &mdDoc{src: before}
+		op := section("import", "@"+homeRelative(path))
+		if want {
+			err = doc.apply(op)
+		} else {
+			err = doc.reset(op)
+		}
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, agent.Change{Path: l, Before: before, After: doc.src})
+	}
+	return changes, nil
+}
+
+// homeRelative writes path as ~/… when it is under the home directory, as
+// Claude Code's own docs do for imports.
+func homeRelative(path string) string {
+	if home, err := os.UserHomeDir(); err == nil {
+		if rel, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
+			return "~/" + rel
 		}
 	}
-	return changes, notes, nil
+	return path
 }
 
 // Markdown (global instructions) ------------------------------------------

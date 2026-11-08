@@ -22,8 +22,9 @@ Agreed with the user 2026-11-09.
 - Separate target `instructions` (dashboard sidebar "Behavior", `agentctl tune instructions`). Every item is a marked
   section (`<!-- agentctl:<id> -->` … `<!-- /agentctl:<id> -->`) in `~/.agents/AGENTS.md`; text outside markers is the
   user's. Reset removes the section; a changed section text in a newer release counts as not applied and is replaced.
-- Applying links `~/.claude/CLAUDE.md` to that file when it doesn't exist; an existing separate file is left alone
-  with a note. No Codex link (user: not needed).
+- Claude Code reads it via `~/.claude/CLAUDE.md`: a missing file becomes a link; an existing file keeps its text and
+  gets a marked `@~/.agents/AGENTS.md` import (user-level imports load without an approval prompt, per the memory
+  docs). Removing every section also removes the import. No Codex link (user: not needed).
 - Items chosen with the user (generic, from their Mac and minipc files): judgment, shared tools, link every PR/ticket,
   working style, project notes, terse replies. Dropped: Git/PR habits beyond linking, Playwright UI checks, anything
   Writer-, gcloud-, kubectl- or machine-specific.

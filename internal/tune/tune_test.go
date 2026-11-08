@@ -225,19 +225,28 @@ func TestInstructionsSectionsAndLinks(t *testing.T) {
 	}
 }
 
-func TestInstructionsLeaveSeparateClaudeFile(t *testing.T) {
+func TestInstructionsImportIntoSeparateClaudeFile(t *testing.T) {
 	home := testutil.Home(t)
 	claudeMD := filepath.Join(home, ".claude", "CLAUDE.md")
-	write(t, claudeMD, "my own\n")
-	statuses, err := Inspect(Instructions)
+	mine := "# my own\n"
+	write(t, claudeMD, mine)
+	run(t, Instructions, Recommended(must(Inspect(Instructions))))
+	b, _ := os.ReadFile(claudeMD)
+	if !strings.HasPrefix(string(b), mine) || !strings.Contains(string(b), "\n@~/.agents/AGENTS.md\n") {
+		t.Fatalf("CLAUDE.md should keep its text and import the shared file:\n%s", b)
+	}
+	if plan, err := Plan(Instructions, Recommended(must(Inspect(Instructions)))); err != nil || !plan.Empty() {
+		t.Fatalf("applying again should change nothing: %v\n%s", err, plan.Diff())
+	}
+	run(t, Instructions, nil)
+	if b, _ := os.ReadFile(claudeMD); string(b) != mine {
+		t.Fatalf("reset should remove the import, got:\n%s", b)
+	}
+}
+
+func must[T any](v T, err error) T {
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	if len(statuses[0].Notes) != 1 || !strings.Contains(statuses[0].Notes[0], claudeMD) {
-		t.Fatalf("want a note about the separate file, got %v", statuses[0].Notes)
-	}
-	run(t, Instructions, Recommended(statuses))
-	if b, _ := os.ReadFile(claudeMD); string(b) != "my own\n" {
-		t.Fatal("an existing CLAUDE.md must be left alone")
-	}
+	return v
 }
