@@ -162,6 +162,8 @@ func (m Model) hints() string {
 		return "↑↓ select · enter open · click anything · q quit"
 	case routeDialog, modelDialog:
 		return "↑↓ · enter choose · esc back"
+	case tuneDialog:
+		return "↑↓ · space toggle · y review · x reset all · esc close"
 	case confirmDialog:
 		return "y apply · n cancel · scroll"
 	case addDialog:
@@ -323,11 +325,11 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	case as.status.Route == agent.Local:
 		d.heading = "Uses its own login"
 		d.body = "Requests use the account " + title + " is logged in with."
-		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}}
+		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}, {"Tune", "tune:" + as.agent.Name, false}}
 	default:
 		d.heading = "Routed through " + as.status.Route
 		d.body = "Requests use the accounts logged in on " + as.status.Route + "."
-		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}, {"Use own login", "local:" + as.agent.Name, false}}
+		d.buttons = []button{{"Switch route", "switch:" + as.agent.Name, true}, {"Use own login", "local:" + as.agent.Name, false}, {"Tune", "tune:" + as.agent.Name, false}}
 		if as.agent.Name == codex.Name {
 			d.buttons = append(d.buttons, button{"Refresh models", "refresh", false})
 		}
@@ -459,6 +461,8 @@ func (m Model) drawDialog(sc *scene) {
 			by += 2
 		}
 		m.drawOptions(sc, bx, by, rows)
+	case tuneDialog:
+		m.drawTune(sc)
 	case ackDialog:
 		body := strings.Split(p.Body(claude.PolicyWarning, m.dialogWidth()-6), "\n")
 		body = append(body, "", skin.Fg(p.Text).Render("You will only be asked once."))
@@ -486,6 +490,50 @@ func (m Model) drawDialog(sc *scene) {
 		}, []button{{"Cancel", "m:cancel", false}, {"Remove", "m:remove", true}})
 	case addDialog:
 		m.drawAddForm(sc)
+	}
+}
+
+func (m Model) drawTune(sc *scene) {
+	p := m.pal
+	rows := m.listRows()
+	w := m.dialogWidth() - 6
+	cur := m.tuneItems[m.pick]
+	var about []string
+	about = append(about, strings.Split(p.Body(cur.Why, w), "\n")...)
+	about = append(about, skin.Fg(p.Dim).Render("Cost: ")+skin.Fg(p.Muted).Render(cur.Cost))
+	for _, n := range cur.Notes {
+		about = append(about, skin.Fg(p.Amber).Render("! "+n))
+	}
+	body := append([]string{skin.Fg(p.Muted).Render("Ticked items are applied; unticked ones reset to the default."), ""}, make([]string, rows+1)...)
+	body = append(body, about...)
+	bx, by := m.panel(sc, "Tune · "+title(m.tuneAgent), "Curated settings", body, []button{
+		{"Reset to defaults", "m:tune-reset", false}, {"Cancel", "m:cancel", false}, {"Review changes", "m:tune-review", true},
+	})
+	labelW := 0
+	for _, o := range m.options {
+		labelW = max(labelW, lipgloss.Width(o.label))
+	}
+	for r := range rows {
+		i := m.top + r
+		if i >= len(m.options) {
+			break
+		}
+		it := m.tuneItems[i]
+		box := "[ ]"
+		if m.tuneWant[it.ID] {
+			box = "[x]"
+		}
+		detail := ""
+		switch {
+		case it.Applied && !m.tuneWant[it.ID]:
+			detail = "will reset"
+		case !it.Applied && m.tuneWant[it.ID]:
+			detail = "will apply"
+		case it.Applied:
+			detail = "applied"
+		}
+		id := "m:opt:" + strconv.Itoa(i)
+		sc.add(p.Row(box, fmt.Sprintf("%-*s", labelW, it.Title), detail, w, i == m.pick, m.hover == id), bx, by+2+r, 53, id)
 	}
 }
 

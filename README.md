@@ -54,6 +54,10 @@ agentctl status
 A proxy is just a URL and a client API key; reach it however you like (Tailscale serve, a LAN address). For a key
 that should stay on the proxy's machine, `--key-cmd` runs a command to print it instead of storing it.
 
+`agentctl tune claude` (or the Tune button) applies curated settings: fewer unused tools, no background spend,
+privacy without losing features, and an opt-in "never ask for approval". Unticking an item, or "Reset to defaults",
+puts the agent's own defaults back. You review a diff before anything is written.
+
 Models agentctl cannot prove are non-Anthropic are hidden from Codex. Clear one you trust with
 `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude Code picks up new
 proxy models on its own at startup; Codex needs `agentctl refresh`.

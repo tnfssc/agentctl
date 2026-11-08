@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/tnfssc/agentctl/internal/agent/codex"
+	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/testutil"
 )
 
@@ -149,5 +150,25 @@ func TestClaudeModelFlagIsRejected(t *testing.T) {
 	_, err := execute(t, "use", "claude", "spark", "--model", "Opus 5.5", "--yes")
 	if err == nil || !strings.Contains(err.Error(), "with /model") {
 		t.Fatalf("want /model guidance, got %v", err)
+	}
+}
+
+func TestTune(t *testing.T) {
+	home, _ := setup(t)
+	if _, err := execute(t, "tune", "codex"); err == nil {
+		t.Fatal("without a terminal, tune needs --yes")
+	}
+	must(t, "tune", "codex", "--yes")
+	got, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err != nil || !strings.Contains(string(got), "[analytics]") || strings.Contains(string(got), "danger-full-access") {
+		t.Fatalf("recommended codex settings: %v\n%s", err, got)
+	}
+	must(t, "tune", "codex", "--reset", "--yes")
+	if got, _ := os.ReadFile(filepath.Join(home, ".codex", "config.toml")); strings.TrimSpace(string(got)) != "" {
+		t.Fatalf("reset should remove every curated setting:\n%s", got)
+	}
+	st, err := config.LoadState()
+	if err != nil || st.ClaudeProxyAcknowledged {
+		t.Fatalf("tuning must not count as acknowledging the proxy warning: %+v %v", st, err)
 	}
 }

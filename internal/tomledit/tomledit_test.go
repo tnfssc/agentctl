@@ -156,3 +156,53 @@ func TestAppendThenRemoveIsIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestSetInTables(t *testing.T) {
+	tests := []struct {
+		name, src, want string
+		path            []string
+	}{
+		{"replace keeps comment", "[features]\nhooks = true # mine\n", "[features]\nhooks = false # mine\n", []string{"features", "hooks"}},
+		{"add to existing table", "[features]\nhooks = true\n\n[tui]\nx = 1\n", "[features]\nhooks = true\nimage_generation = false\n\n[tui]\nx = 1\n", []string{"features", "image_generation"}},
+		{"add to header-only table at EOF", "[features]", "[features]\nimage_generation = false\n", []string{"features", "image_generation"}},
+		{"dotted style", "model = \"m\"\nfeatures.hooks = true\n\n[tui]\n", "model = \"m\"\nfeatures.hooks = true\nfeatures.image_generation = false\n\n[tui]\n", []string{"features", "image_generation"}},
+		{"new table", "model = \"m\"\n", "model = \"m\"\n\n[features]\nimage_generation = false\n", []string{"features", "image_generation"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := Set([]byte(tt.src), "false", tt.path...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(out) != tt.want {
+				t.Fatalf("got:\n%q\nwant:\n%q", out, tt.want)
+			}
+			if got, ok, _ := Get(out, tt.path...); !ok || got != "false" {
+				t.Fatalf("Get = %q %v", got, ok)
+			}
+		})
+	}
+}
+
+func TestSetThenDeleteRestores(t *testing.T) {
+	for _, src := range []string{"model = \"m\"\n", "[features]\nhooks = true\n", "model = \"m\"\n\n[tui]\nx = 1\n"} {
+		out, err := Set([]byte(src), "false", "analytics", "enabled")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out, err = Delete(out, "analytics", "enabled"); err != nil {
+			t.Fatal(err)
+		}
+		if string(out) != src {
+			t.Errorf("round trip of %q = %q", src, out)
+		}
+	}
+}
+
+func TestDeleteKeepsNonEmptyTable(t *testing.T) {
+	src := "[features]\nhooks = true\nx = 1\n"
+	out, err := Delete([]byte(src), "features", "x")
+	if err != nil || string(out) != "[features]\nhooks = true\n" {
+		t.Fatalf("got %q %v", out, err)
+	}
+}

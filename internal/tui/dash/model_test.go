@@ -11,6 +11,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/tune"
 )
 
 func send(t *testing.T, m Model, msgs ...tea.Msg) Model {
@@ -200,5 +201,30 @@ func TestRemoteSessionsSkipHover(t *testing.T) {
 	m := send(t, New(context.Background(), Options{Remote: true}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded())
 	if m.View().MouseMode != tea.MouseModeCellMotion {
 		t.Fatal("over SSH, only clicks and wheel should be reported")
+	}
+}
+
+func TestTuneDialog(t *testing.T) {
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 40}, loaded(), click("tune:codex"))
+	if m.busy == "" {
+		t.Fatal("tune should read settings first")
+	}
+	items := []tune.Status{
+		{Item: tune.Item{ID: "analytics", Title: "Turn off analytics", Recommended: true}},
+		{Item: tune.Item{ID: "no-approvals", Title: "Never ask"}, Applied: true},
+	}
+	m = send(t, m, tuneLoadedMsg{agent: "codex", items: items})
+	if m.dialog != tuneDialog || !m.tuneWant["analytics"] || !m.tuneWant["no-approvals"] {
+		t.Fatalf("dialog %v want %v", m.dialog, m.tuneWant)
+	}
+	if !strings.Contains(m.View().Content, "Reset to defaults") {
+		t.Fatal("dialog needs a reset button")
+	}
+	m = send(t, m, click("m:opt:1"))
+	if m.tuneWant["no-approvals"] || m.dialog != tuneDialog {
+		t.Fatal("clicking a row should untick it and keep the dialog open")
+	}
+	if m = send(t, m, click("m:tune-reset")); m.busy != "Planning" {
+		t.Fatal("reset should plan")
 	}
 }

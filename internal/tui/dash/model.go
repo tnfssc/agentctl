@@ -26,6 +26,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
+	"github.com/tnfssc/agentctl/internal/tune"
 )
 
 // dialog is the modal on top of the home screen, if any.
@@ -40,6 +41,7 @@ const (
 	addDialog            // new proxy form
 	proxyDialog          // one proxy's check result and models
 	removeDialog         // confirm removing a proxy
+	tuneDialog           // curated settings for one agent
 )
 
 // option is one row of a pick list.
@@ -104,6 +106,10 @@ type Model struct {
 	plan    agent.Plan
 	proxy   string // proxy shown in proxyDialog / removeDialog
 	vp      viewport.Model
+
+	tuneAgent string
+	tuneItems []tune.Status
+	tuneWant  map[string]bool
 
 	inputs  []textinput.Model
 	field   int    // focused input in addDialog
@@ -205,7 +211,23 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m.close(msg.err.Error(), true), load
 		}
+		if msg.plan.Route == "" {
+			return m.close(title(msg.plan.Agent)+" settings updated. Restart running sessions to pick them up.", false), load
+		}
 		return m.close(fmt.Sprintf("%s now uses %s. Restart running sessions to pick it up.", title(msg.plan.Agent), describe(msg.plan.Route)), false), load
+	case tuneLoadedMsg:
+		m.busy = ""
+		if msg.err != nil {
+			return m.close(msg.err.Error(), true), nil
+		}
+		m.tuneAgent, m.tuneItems, m.tuneWant = msg.agent, msg.items, tune.Recommended(msg.items)
+		m.options = make([]option, len(msg.items))
+		for i, it := range msg.items {
+			m.options[i] = option{label: it.Title, detail: it.Cost, value: it.ID}
+		}
+		m.pick, m.top = 0, 0
+		m.dialog = tuneDialog
+		return m, nil
 	case savedMsg:
 		m.busy = ""
 		if msg.err != nil {
@@ -281,7 +303,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pointerWheel:
 		switch m.dialog {
-		case routeDialog, modelDialog:
+		case routeDialog, modelDialog, tuneDialog:
 			m.movePick(p.wheel)
 		case confirmDialog, proxyDialog:
 			if p.wheel < 0 {
@@ -320,6 +342,9 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.act(arg)
+	case "tune":
+		m.busy = "Reading " + title(arg) + " settings"
+		return m, inspectTune(arg)
 	case "local":
 		m.req = app.Request{Agent: arg, Route: agent.Local}
 		m.busy = "Planning"
@@ -362,7 +387,17 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pick = i
+		if m.dialog == tuneDialog {
+			m.toggleTune()
+			return m, nil
+		}
 		return m.choose()
+	case "tune-review":
+		m.busy = "Planning"
+		return m, planTune(m.tuneAgent, m.tuneWant)
+	case "tune-reset":
+		m.busy = "Planning"
+		return m, planTune(m.tuneAgent, nil)
 	case "ack":
 		m.busy = "Planning"
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
@@ -432,6 +467,22 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.close("", false), nil
 		}
 		return m, nil
+	case tuneDialog:
+		switch k {
+		case "up", "k":
+			m.movePick(-1)
+		case "down", "j":
+			m.movePick(1)
+		case "space", "enter":
+			m.toggleTune()
+		case "y":
+			return m.actDialog("tune-review")
+		case "x":
+			return m.actDialog("tune-reset")
+		case "esc":
+			return m.close("", false), nil
+		}
+		return m, nil
 	case ackDialog, removeDialog:
 		switch k {
 		case "y", "enter":
@@ -474,6 +525,18 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateInputs(msg)
 	}
 	return m, nil
+}
+
+// toggleTune flips the highlighted curated item. The map is replaced, not
+// mutated, because Bubble Tea copies the model by value.
+func (m *Model) toggleTune() {
+	id := m.options[m.pick].value
+	want := make(map[string]bool, len(m.tuneWant))
+	for k, v := range m.tuneWant {
+		want[k] = v
+	}
+	want[id] = !want[id]
+	m.tuneWant = want
 }
 
 func (m *Model) movePick(delta int) {
@@ -562,6 +625,8 @@ func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 		return m.close(msg.err.Error(), true), nil
 	case msg.plan.Empty() && msg.refresh:
 		return m.close("Codex's model list is already up to date", false), nil
+	case msg.plan.Empty() && msg.plan.Route == "":
+		return m.close(title(msg.plan.Agent)+" settings already match; nothing to change", false), nil
 	case msg.plan.Empty():
 		return m.close(fmt.Sprintf("%s already uses %s; nothing to change", title(msg.plan.Agent), describe(msg.plan.Route)), false), nil
 	}

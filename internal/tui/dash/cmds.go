@@ -9,6 +9,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/tune"
 )
 
 // Results of background work. Every slow call (network, `codex debug
@@ -37,6 +38,11 @@ type (
 	appliedMsg struct {
 		plan agent.Plan
 		err  error
+	}
+	tuneLoadedMsg struct {
+		agent string
+		items []tune.Status
+		err   error
 	}
 	savedMsg struct {
 		name  string
@@ -94,6 +100,20 @@ func refresh(ctx context.Context, cfg *config.Config, st *config.State) tea.Cmd 
 	return func() tea.Msg {
 		p, err := app.RefreshCodex(ctx, cfg, st)
 		return plannedMsg{plan: p, err: err, refresh: true}
+	}
+}
+
+func inspectTune(agentName string) tea.Cmd {
+	return func() tea.Msg {
+		items, err := tune.Inspect(agentName)
+		return tuneLoadedMsg{agent: agentName, items: items, err: err}
+	}
+}
+
+func planTune(agentName string, want map[string]bool) tea.Cmd {
+	return func() tea.Msg {
+		p, err := tune.Plan(agentName, want)
+		return plannedMsg{plan: p, err: err}
 	}
 }
 

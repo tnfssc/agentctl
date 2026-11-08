@@ -193,7 +193,7 @@ func PlanUse(cfg *config.Config, route string) (agent.Plan, error) {
 			return agent.Plan{}, err
 		}
 	}
-	after := format(src, before)
+	after := Format(src, before)
 	if before == nil && string(after) == "{}\n" {
 		after = nil
 	}
@@ -202,9 +202,9 @@ func PlanUse(cfg *config.Config, route string) (agent.Plan, error) {
 	return plan, nil
 }
 
-// format pretty-prints like Claude Code does (two spaces, one item per line,
+// Format pretty-prints like Claude Code does (two spaces, one item per line,
 // key order kept) and keeps the original's trailing-newline choice.
-func format(src, original []byte) []byte {
+func Format(src, original []byte) []byte {
 	out := pretty.PrettyOptions(src, &pretty.Options{Width: 1, Indent: "  "})
 	if len(original) > 0 && original[len(original)-1] != '\n' {
 		out = []byte(strings.TrimRight(string(out), "\n"))

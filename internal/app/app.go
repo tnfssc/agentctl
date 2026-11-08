@@ -124,7 +124,7 @@ func Apply(plan agent.Plan, st *config.State) error {
 	if err := plan.Apply(); err != nil {
 		return err
 	}
-	if plan.Agent == claude.Name && plan.Route != agent.Local {
+	if plan.Agent == claude.Name && plan.Route != agent.Local && plan.Route != "" {
 		st.ClaudeProxyAcknowledged = true
 	}
 	return st.Save()

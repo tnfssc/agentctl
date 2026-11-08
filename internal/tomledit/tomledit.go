@@ -29,7 +29,11 @@ type item struct {
 	key   []string // key/value key; nil for headers
 	start int      // byte offset of the first byte
 	end   int      // byte offset just past the last byte
+	value int      // key/values: byte offset just past the '='
 }
+
+// path is the full dotted path of a key/value: its table, then its key.
+func (it item) path() []string { return append(slices.Clone(it.table), it.key...) }
 
 func parse(src []byte) ([]item, error) {
 	var (
@@ -41,21 +45,24 @@ func parse(src []byte) ([]item, error) {
 	for p.NextExpression() {
 		e := p.Expression()
 		var (
-			keys  []string
-			first unstable.Range
+			keys        []string
+			first, last unstable.Range
 		)
 		for it := e.Key(); it.Next(); {
 			n := it.Node()
 			if keys == nil {
 				first = n.Raw
 			}
+			last = n.Raw
 			keys = append(keys, string(n.Data))
 		}
 		switch e.Kind {
 		case unstable.KeyValue:
+			keyEnd := int(last.Offset + last.Length)
 			items = append(items, item{
 				kind: keyValue, table: table, key: keys,
 				start: int(e.Raw.Offset), end: int(e.Raw.Offset + e.Raw.Length),
+				value: keyEnd + bytes.IndexByte(src[keyEnd:], '=') + 1,
 			})
 		case unstable.Table, unstable.ArrayTable:
 			table = keys
@@ -144,6 +151,101 @@ func TopLevel(src []byte, key string) (string, bool, error) {
 		return s, true, nil
 	}
 	return fmt.Sprint(v), true, nil
+}
+
+// Get returns the raw literal at path (tables then key) and whether it exists.
+func Get(src []byte, path ...string) (string, bool, error) {
+	items, err := parse(src)
+	if err != nil {
+		return "", false, err
+	}
+	for _, it := range items {
+		if it.kind == keyValue && slices.Equal(it.path(), path) {
+			return strings.TrimSpace(string(src[it.value:it.end])), true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// Set sets the key at path (tables then key) to a TOML literal. An existing
+// value is replaced in place, keeping the key as written and any trailing
+// comment. A new key goes at the end of its table, as a dotted key if the
+// file already spells that table with dotted keys, or into a new table.
+func Set(src []byte, literal string, path ...string) ([]byte, error) {
+	if len(path) == 1 {
+		return SetTopLevel(src, path[0], literal)
+	}
+	items, err := parse(src)
+	if err != nil {
+		return nil, err
+	}
+	parent, key := path[:len(path)-1], path[len(path)-1]
+	for _, it := range items {
+		if it.kind == keyValue && slices.Equal(it.path(), path) {
+			return validate(splice(src, it.value, it.end, " "+literal))
+		}
+	}
+	for i, it := range items {
+		if it.kind != header || !slices.Equal(it.table, parent) {
+			continue
+		}
+		at := it.end
+		for _, kv := range items[i+1:] {
+			if kv.kind == header {
+				break
+			}
+			at = lineEnd(src, kv.end-1)
+		}
+		return validate(insertLine(src, at, key+" = "+literal))
+	}
+	for _, it := range items {
+		if it.kind == header {
+			break
+		}
+		if hasPrefix(it.key, parent) {
+			return SetTopLevel(src, strings.Join(path, "."), literal)
+		}
+	}
+	return AppendBlock(src, "["+strings.Join(parent, ".")+"]\n"+key+" = "+literal+"\n")
+}
+
+// Delete removes the key at path, and its table header if the table is left
+// with no keys and no sub-tables.
+func Delete(src []byte, path ...string) ([]byte, error) {
+	items, err := parse(src)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.kind == keyValue && slices.Equal(it.path(), path) {
+			src = splice(src, lineStart(src, it.start), lineEnd(src, it.end-1), "")
+			return pruneTable(src, path[:len(path)-1])
+		}
+	}
+	return src, nil
+}
+
+func pruneTable(src []byte, table []string) ([]byte, error) {
+	items, err := parse(src)
+	if err != nil || len(table) == 0 {
+		return validate(src)
+	}
+	for i, it := range items {
+		if it.kind != header || !hasPrefix(it.table, table) {
+			continue
+		}
+		if !slices.Equal(it.table, table) || i+1 < len(items) && items[i+1].kind == keyValue {
+			return validate(src) // still has keys or sub-tables
+		}
+	}
+	return RemoveTable(src, table...)
+}
+
+func insertLine(src []byte, at int, line string) []byte {
+	if at > 0 && src[at-1] != '\n' {
+		line = "\n" + line
+	}
+	return splice(src, at, at, line+"\n")
 }
 
 // RemoveTable deletes the table at path, its sub-tables, their keys, and

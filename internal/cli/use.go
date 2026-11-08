@@ -121,7 +121,11 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 		u.warn(w)
 	}
 	if plan.Empty() {
-		u.ok(fmt.Sprintf("%s already uses %s; nothing to change", plan.Agent, describeRoute(plan.Route)))
+		if plan.Route == "" {
+			u.ok(plan.Agent + " settings already match; nothing to change")
+		} else {
+			u.ok(fmt.Sprintf("%s already uses %s; nothing to change", plan.Agent, describeRoute(plan.Route)))
+		}
 		return nil
 	}
 	u.diff(plan.Diff())
@@ -140,7 +144,11 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 	if err := app.Apply(plan, st); err != nil {
 		return err
 	}
-	u.ok(fmt.Sprintf("%s now uses %s. Restart running %s sessions to pick it up.", plan.Agent, describeRoute(plan.Route), plan.Agent))
+	if plan.Route == "" {
+		u.ok(fmt.Sprintf("%s settings updated. Restart running %s sessions to pick them up.", plan.Agent, plan.Agent))
+	} else {
+		u.ok(fmt.Sprintf("%s now uses %s. Restart running %s sessions to pick it up.", plan.Agent, describeRoute(plan.Route), plan.Agent))
+	}
 	return nil
 }
 
