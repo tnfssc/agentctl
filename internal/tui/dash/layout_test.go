@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/app"
@@ -282,5 +283,83 @@ func TestSidebarStaysInItsArea(t *testing.T) {
 			m = send(t, m, keyPress("down"))
 			check(m, fmt.Sprintf("focus %d", m.focus))
 		}
+	}
+}
+
+func TestAddRowIsFixedWhateverTheProxyCount(t *testing.T) {
+	for _, sz := range sizes {
+		var states []state
+		for _, n := range []int{0, 1, 2, 70} {
+			msg := loaded()
+			msg.cfg.Proxies = map[string]config.Proxy{}
+			for i := range n {
+				msg.cfg.Proxies[fmt.Sprintf("p%02d", i)] = config.Proxy{URL: "http://x"}
+			}
+			m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: sz[0], Height: sz[1]}, msg)
+			states = append(states, state{fmt.Sprintf("%d proxies", n), m})
+		}
+		sameRects(t, states, "nav:add", "nav:p00")
+	}
+}
+
+func TestMultilineTextStaysOneRow(t *testing.T) {
+	multi := "first line\nsecond line\nthird line"
+	for _, sz := range sizes {
+		m := base(t, sz[0], sz[1])
+		toast := m
+		toast.toast, toast.toastErr = multi, true
+		down := send(t, m, probedMsg{name: "spark", probe: app.Probe{HealthErr: errors.New(multi)}})
+		down.focus = 2
+		form, _ := m.openAdd()
+		withErr := send(t, form.(Model), savedMsg{name: "x", err: errors.New(multi)})
+		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}})
+		for _, c := range []struct {
+			m  Model
+			id string
+		}{{toast, "status"}, {down, "fact:2"}, {withErr, "m:error"}, {picker, "m:opt:1"}} {
+			if r := rectsOf(c.m)[c.id]; r.H != 1 {
+				t.Errorf("%s: %q is %d rows tall", sizeName(m), c.id, r.H)
+			}
+		}
+		report := send(t, m, probedMsg{name: "spark", probe: app.Probe{Models: []proxy.Model{{ID: multi}, {ID: "next"}}}}, click("details:spark"))
+		if lines := strings.Split(report.proxyReport("spark"), "\n"); len(lines) != 9 {
+			t.Errorf("%s: report has %d rows, want 7 header rows + 2 models", sizeName(m), len(lines))
+		}
+	}
+}
+
+func TestPillTextDoesNotMove(t *testing.T) {
+	m := base(t, 120, 40)
+	two := loaded()
+	two.cfg.Proxies["zeta"] = config.Proxy{URL: "http://z"}
+	m2 := send(t, m, two)
+	var at []int
+	for _, s := range []Model{
+		New(context.Background(), Options{}), m,
+		send(t, m, probedMsg{name: "spark", probe: live(false)}),
+		send(t, m2, probedMsg{name: "spark", probe: live(false)}, probedMsg{name: "zeta", probe: app.Probe{HealthErr: errors.New("x")}}),
+	} {
+		s.width, s.height = 120, 40
+		pill := ansi.Strip(s.pill(s.pal))
+		at = append(at, strings.Index(strings.Split(pill, "\n")[1], " / "))
+	}
+	for _, x := range at[1:] {
+		if x != at[0] {
+			t.Fatalf("pill separator moves: %v", at)
+		}
+	}
+}
+
+func TestProbeResultKeepsReportScroll(t *testing.T) {
+	m := send(t, base(t, 120, 40), probedMsg{name: "spark", probe: live(false)}, click("details:spark"))
+	for range 10 {
+		m = send(t, m, pointerMsg{kind: pointerWheel, wheel: 1})
+	}
+	off := m.vp.YOffset()
+	if off == 0 {
+		t.Fatal("report did not scroll")
+	}
+	if m = send(t, m, probedMsg{name: "spark", probe: live(false)}); m.vp.YOffset() != off {
+		t.Fatalf("new probe result moved the report from %d to %d", off, m.vp.YOffset())
 	}
 }

@@ -13,4 +13,7 @@ classes, all from content-sized layout.
 - Overflow truncates or scrolls inside its own area; it never pushes neighbors. Empty slots stay empty.
 - `layout_test.go` compares rects of identified layers across many states and sizes (80x24..200x60); mutation-checked
   to catch reintroduced shifts. Give new elements layer IDs so the tests cover them.
-- Data changes (adding a proxy reorders the sorted sidebar) are not interaction shifts and are allowed.
+- A second Codex audit found 5 more: report scroll reset on probe refresh, "Add a proxy" following the list length,
+  multi-line text (errors, model ids) growing one-row cells, and text moving inside the pill. Now: refreshes keep the
+  scroll offset, Add sits on a fixed row below a fixed-height window, `skin.Cell` flattens line breaks, pill fields
+  have fixed widths. Model maps (probes, tune selection) are copied on write so value copies never share state.

@@ -196,9 +196,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadedMsg:
 		return m.onLoaded(msg)
 	case probedMsg:
-		m.probes[msg.name] = msg.probe
+		m.setProbe(msg.name, &msg.probe)
 		if m.dialog == proxyDialog && m.proxy == msg.name {
-			m.setReport(m.proxyReport(msg.name))
+			m.refreshReport(m.proxyReport(msg.name))
 		}
 		return m, nil
 	case modelsMsg:
@@ -233,11 +233,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.formErr = msg.err.Error()
 			return m, nil
 		}
-		m.probes[msg.name] = msg.probe
+		m.setProbe(msg.name, &msg.probe)
 		return m.close("Added "+msg.name, false), load
 	case removedMsg:
 		m.busy = ""
-		delete(m.probes, msg.name)
+		m.setProbe(msg.name, nil)
 		if msg.err != nil {
 			return m.close(msg.err.Error(), true), load
 		}
@@ -274,7 +274,7 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 func (m *Model) probeAll() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, name := range m.cfg.Names() {
-		delete(m.probes, name)
+		m.setProbe(name, nil)
 		cmds = append(cmds, probe(m.ctx, name, m.cfg.Proxies[name]))
 	}
 	return tea.Batch(cmds...)
@@ -353,7 +353,7 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 	case "proxy", "details":
 		return m.openProxy(arg), nil
 	case "test":
-		delete(m.probes, arg)
+		m.setProbe(arg, nil)
 		return m, probe(m.ctx, arg, m.cfg.Proxies[arg])
 	case "rm":
 		m.proxy, m.dialog = arg, removeDialog
@@ -404,8 +404,8 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		m.busy = "Applying"
 		return m, apply(m.plan, m.st)
 	case "test":
-		delete(m.probes, m.proxy)
-		m.setReport(m.proxyReport(m.proxy))
+		m.setProbe(m.proxy, nil)
+		m.refreshReport(m.proxyReport(m.proxy))
 		return m, probe(m.ctx, m.proxy, m.cfg.Proxies[m.proxy])
 	case "rm":
 		m.dialog = removeDialog
@@ -704,6 +704,29 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	m.formErr = ""
 	m.busy = "Checking " + url
 	return m, saveProxy(m.ctx, name, config.Proxy{URL: url, Key: key})
+}
+
+// setProbe records or forgets a probe result. The map is replaced, not
+// mutated, because Bubble Tea copies the model by value.
+func (m *Model) setProbe(name string, r *app.Probe) {
+	probes := make(map[string]app.Probe, len(m.probes))
+	for k, v := range m.probes {
+		probes[k] = v
+	}
+	if r == nil {
+		delete(probes, name)
+	} else {
+		probes[name] = *r
+	}
+	m.probes = probes
+}
+
+// refreshReport replaces the scroll area's text but keeps the reader where
+// they were.
+func (m *Model) refreshReport(text string) {
+	off := m.vp.YOffset()
+	m.vp.SetContent(text)
+	m.vp.SetYOffset(off)
 }
 
 // setReport shows text in the dialog's scroll area. The area keeps its size

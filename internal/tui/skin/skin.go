@@ -143,12 +143,18 @@ func (p Palette) Button(label string, width int, primary, hover bool) string {
 // Pill is the bordered status badge, a colored square then dim and bright
 // text ("■ prod server / running"), always width cells wide.
 func (p Palette) Pill(dot color.Color, dim, bright string, width int) string {
-	s := Fg(dot).Render("■") + " " + Fg(p.Muted).Render(dim) + Fg(p.Dim).Render(" / ") + Fg(p.Text).Render(bright)
+	const brightW = 9
+	dimW := max(1, width-2-2-3-brightW) // border, "■ ", " / "
+	s := Fg(dot).Render("■") + " " + Fg(p.Muted).Render(Cell(dim, dimW)) + Fg(p.Dim).Render(" / ") + Fg(p.Text).Render(Cell(bright, brightW))
 	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Line).Render(Cell(s, width-2))
 }
 
-// Cell truncates or pads styled text to exactly width cells.
-func Cell(s string, width int) string { return pad(ansi.Truncate(s, max(0, width), "…"), width) }
+// Cell renders styled text as exactly one row of exactly width cells: line
+// breaks become spaces, then the text is truncated or padded.
+func Cell(s string, width int) string {
+	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(s)
+	return pad(ansi.Truncate(s, max(0, width), "…"), width)
+}
 
 // Clip wraps text to width and keeps at most lines lines, ending the last
 // one with an ellipsis when text was cut.
@@ -172,7 +178,7 @@ func (p Palette) Wordmark() string {
 func (p Palette) Row(icon, label string, labelW int, detail string, width int, selected, hover bool) string {
 	label = Cell(label, labelW)
 	if detail != "" {
-		detail = "  " + detail
+		detail = "  " + Cell(detail, max(0, width-labelW-4))
 	}
 	switch {
 	case selected:

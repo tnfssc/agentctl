@@ -9,7 +9,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
@@ -232,13 +231,14 @@ func (m Model) pill(p skin.Palette) string {
 	}
 }
 
-// proxyWindow is the first proxy row shown and how many fit, keeping the
-// selected proxy visible. The window height depends only on the terminal.
+// proxyWindow is the first proxy shown and the window's height, keeping the
+// selected proxy visible. The height depends only on the terminal; "Add a
+// proxy" sits on the row below it, so it never moves.
 func (m Model) proxyWindow(listTop, bottom int) (first, rows int) {
 	names := m.cfg.Names()
-	rows = max(1, bottom-listTop) // one row stays for "Add a proxy"
+	rows = max(1, bottom-listTop)
 	if len(names) <= rows {
-		return 0, len(names)
+		return 0, rows
 	}
 	sel := m.focus - len(m.statuses)
 	first = max(0, min(sel-rows+1, len(names)-rows))
@@ -271,16 +271,15 @@ func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
 	names := m.cfg.Names()
 	first, rows := m.proxyWindow(y+2, bottom)
 	label := p.Label("Proxies")
-	if rows < len(names) {
+	if len(names) > rows {
 		label += skin.Fg(p.Dim).Render(fmt.Sprintf("  %d–%d of %d", first+1, first+rows, len(names)))
 	}
 	sc.add(label, 3, y, 1, "")
 	y += 2
-	for _, n := range names[first : first+rows] {
-		row(y, "proxy:"+n, m.proxyDot(p, n), n, rw-4, "")
-		y++
+	for i, n := range names[first:min(len(names), first+rows)] {
+		row(y+i, "proxy:"+n, m.proxyDot(p, n), n, rw-4, "")
 	}
-	row(y, "add", "+", "Add a proxy", rw-4, "")
+	row(y+rows, "add", "+", "Add a proxy", rw-4, "")
 }
 
 // proxyDot is a colored status dot for a proxy.
@@ -719,7 +718,7 @@ func (m Model) proxyReport(name string) string {
 		lines = append(lines, skin.Fg(p.Text).Render(skin.Cell(pm.ID, idW))+"  "+skin.Fg(p.Dim).Render(skin.Cell(pm.OwnedBy, ownerW))+"  "+who)
 	}
 	for i := range lines {
-		lines[i] = ansi.Truncate(lines[i], width, "…")
+		lines[i] = skin.Cell(lines[i], width) // one row each, whatever the data holds
 	}
 	return strings.Join(lines, "\n")
 }
