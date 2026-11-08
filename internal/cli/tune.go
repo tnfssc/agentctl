@@ -18,8 +18,8 @@ func newTuneCmd() *cobra.Command {
 		Use:   "tune <claude|codex|instructions>",
 		Short: "Apply agentctl's curated settings, or reset them",
 		Long: "Pick curated settings for Claude Code or Codex (fewer unused tools, no background spend, privacy\n" +
-			"without losing features), or curated agent instructions, written to ~/.agents/AGENTS.md and linked\n" +
-			"for both agents. Unticking an item resets it to the default.",
+			"without losing features), or curated agent instructions, written to ~/.agents/AGENTS.md.\n" +
+			" Unticking an item resets it to the default.",
 		Example: `  agentctl tune claude             # pick interactively
   agentctl tune codex --yes        # apply the recommended set
   agentctl tune instructions       # shared behavior for every agent

@@ -346,7 +346,7 @@ func (m Model) detail(p skin.Palette) detailView {
 		d := detailView{
 			label:   "Behavior · all agents",
 			heading: "Shared agent instructions",
-			body:    "Curated sections of " + tildePath(path) + ", which Claude Code and Codex both read. Your own text there stays untouched.",
+			body:    "Curated sections of " + tildePath(path) + ", read by every agent. Your own text there stays untouched.",
 			buttons: [3]button{{"Tune", "tune:" + tune.Instructions, true}},
 		}
 		d.facts[1] = fact(p, "file", tildePath(path))

@@ -7,8 +7,8 @@ import (
 )
 
 // Instructions is the tune target for agent behavior: curated sections of
-// the shared global instructions file, ~/.agents/AGENTS.md, which Claude
-// Code and Codex read through links.
+// the shared global instructions file, ~/.agents/AGENTS.md. Claude Code
+// reads it through a link from ~/.claude/CLAUDE.md.
 const Instructions = "instructions"
 
 // InstructionsTitle names the target for people.
@@ -23,22 +23,18 @@ func InstructionsPath() (string, error) {
 	return filepath.Join(home, ".agents", "AGENTS.md"), nil
 }
 
-// instructionLinks are the files each agent reads its global instructions
-// from; agentctl links them to InstructionsPath.
+// instructionLinks are the agent files agentctl links to InstructionsPath.
+// Codex needs none.
 func instructionLinks() ([]string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
 	claudeDir := os.Getenv("CLAUDE_CONFIG_DIR")
 	if claudeDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
 		claudeDir = filepath.Join(home, ".claude")
 	}
-	codexDir := os.Getenv("CODEX_HOME")
-	if codexDir == "" {
-		codexDir = filepath.Join(home, ".codex")
-	}
-	return []string{filepath.Join(claudeDir, "CLAUDE.md"), filepath.Join(codexDir, "AGENTS.md")}, nil
+	return []string{filepath.Join(claudeDir, "CLAUDE.md")}, nil
 }
 
 // section is one marked section. Texts write ‵ for a backtick, which Go raw

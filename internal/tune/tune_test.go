@@ -197,15 +197,10 @@ func TestInstructionsSectionsAndLinks(t *testing.T) {
 	path := filepath.Join(home, ".agents", "AGENTS.md")
 	mine := "# My rules\n\nUse tabs.\n"
 	write(t, path, mine)
-	codexLink := filepath.Join(home, ".codex", "AGENTS.md")
-	write(t, codexLink, "codex has its own file\n")
 
 	statuses, err := Inspect(Instructions)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(statuses[0].Notes) != 1 || !strings.Contains(statuses[0].Notes[0], codexLink) {
-		t.Fatalf("want a note about the separate Codex file, got %v", statuses[0].Notes)
 	}
 	run(t, Instructions, Recommended(statuses))
 
@@ -217,8 +212,8 @@ func TestInstructionsSectionsAndLinks(t *testing.T) {
 	if target, err := os.Readlink(filepath.Join(home, ".claude", "CLAUDE.md")); err != nil || target != path {
 		t.Fatalf("Claude Code should be linked to %s: %q %v", path, target, err)
 	}
-	if b, _ := os.ReadFile(codexLink); string(b) != "codex has its own file\n" {
-		t.Fatal("an existing agent file must be left alone")
+	if _, err := os.Lstat(filepath.Join(home, ".codex", "AGENTS.md")); err == nil {
+		t.Fatal("Codex needs no link")
 	}
 	if st, _ := Inspect(Instructions); !st[0].Applied {
 		t.Fatal("applied sections should read as applied")
@@ -227,5 +222,22 @@ func TestInstructionsSectionsAndLinks(t *testing.T) {
 	run(t, Instructions, nil)
 	if got, _ := os.ReadFile(path); string(got) != mine {
 		t.Fatalf("reset should leave only the user's text, got:\n%s", got)
+	}
+}
+
+func TestInstructionsLeaveSeparateClaudeFile(t *testing.T) {
+	home := testutil.Home(t)
+	claudeMD := filepath.Join(home, ".claude", "CLAUDE.md")
+	write(t, claudeMD, "my own\n")
+	statuses, err := Inspect(Instructions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses[0].Notes) != 1 || !strings.Contains(statuses[0].Notes[0], claudeMD) {
+		t.Fatalf("want a note about the separate file, got %v", statuses[0].Notes)
+	}
+	run(t, Instructions, Recommended(statuses))
+	if b, _ := os.ReadFile(claudeMD); string(b) != "my own\n" {
+		t.Fatal("an existing CLAUDE.md must be left alone")
 	}
 }
