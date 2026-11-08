@@ -129,6 +129,12 @@ func TestAddFormValidatesBeforeChecking(t *testing.T) {
 	if m.busy != "" || m.formErr == "" {
 		t.Fatalf("empty form must not be checked: busy %q err %q", m.busy, m.formErr)
 	}
+	// Name and URL are enough; the key is optional.
+	m.inputs[0].SetValue("home")
+	m.inputs[1].SetValue("http://127.0.0.1:8317")
+	if m = send(t, m, click("m:submit")); m.busy == "" || m.formErr != "" {
+		t.Fatalf("a form without a key should be checked: busy %q err %q", m.busy, m.formErr)
+	}
 }
 
 // TestMouseHitsElements drives OnMouse with real click coordinates, so the

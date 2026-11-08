@@ -584,7 +584,7 @@ func (m Model) openProxy(name string) Model {
 }
 
 func (m Model) openAdd() (tea.Model, tea.Cmd) {
-	placeholders := []string{"spark", "https://spark.your-tailnet.ts.net:8445", "client API key from the proxy's config"}
+	placeholders := []string{"spark", "https://spark.your-tailnet.ts.net:8445", "client API key, if the proxy needs one"}
 	m.inputs = make([]textinput.Model, len(placeholders))
 	for i, ph := range placeholders {
 		in := textinput.New()
@@ -639,9 +639,6 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	case urlErr != nil:
 		m.formErr = urlErr.Error()
 		return m, m.focusInput(1)
-	case key == "":
-		m.formErr = "the API key is required"
-		return m, m.focusInput(2)
 	}
 	m.formErr = ""
 	m.busy = "Checking " + url

@@ -132,3 +132,13 @@ func TestDevNullIsNotATerminal(t *testing.T) {
 		t.Fatal("/dev/null reported as a terminal")
 	}
 }
+
+func TestTokenWithoutKey(t *testing.T) {
+	_, url := setup(t)
+	if _, err := execute(t, "proxy", "add", "open", "--url", url, "--force"); err != nil {
+		t.Fatal(err)
+	}
+	if out := must(t, "token", "open"); strings.TrimSpace(out) != noKey {
+		t.Fatalf("token = %q", out)
+	}
+}

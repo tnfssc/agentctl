@@ -57,8 +57,8 @@ func newProxyAddCmd() *cobra.Command {
 			if p.Key != "" && p.KeyCmd != "" {
 				return errors.New("use --key or --key-cmd, not both")
 			}
-			if p.Key == "" && p.KeyCmd == "" {
-				if p.Key, err = u.secret("API key for " + name); err != nil {
+			if p.Key == "" && p.KeyCmd == "" && u.interactive() {
+				if p.Key, err = u.secret("API key for " + name + " (empty if the proxy has none)"); err != nil {
 					return err
 				}
 			}
@@ -78,7 +78,7 @@ func newProxyAddCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVar(&p.URL, "url", "", "proxy base URL, e.g. http://127.0.0.1:8317")
-	f.StringVar(&p.Key, "key", "", "client API key (prefer --key-cmd or the prompt)")
+	f.StringVar(&p.Key, "key", "", "client API key, if the proxy needs one (prefer --key-cmd or the prompt)")
 	f.StringVar(&p.KeyCmd, "key-cmd", "", "shell command that prints the client API key")
 	f.BoolVar(&force, "force", false, "replace an existing proxy, or save one that fails its check")
 	_ = cmd.MarkFlagRequired("url")

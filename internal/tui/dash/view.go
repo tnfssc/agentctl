@@ -514,7 +514,7 @@ func (m Model) drawOptions(sc *scene, x, y, rows int) {
 func (m Model) drawAddForm(sc *scene) {
 	p := m.pal
 	labels := []string{"Name", "URL", "API key"}
-	hints := []string{"a short name, e.g. spark", "e.g. its Tailscale serve URL", "a client key from the proxy's config"}
+	hints := []string{"a short name, e.g. spark", "e.g. its Tailscale serve URL", "optional; a client key from the proxy's config"}
 	var body []string
 	for i := range labels {
 		body = append(body, skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), "", "", "")

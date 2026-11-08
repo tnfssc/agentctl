@@ -8,6 +8,9 @@ import (
 	"github.com/tnfssc/agentctl/internal/config"
 )
 
+// noKey is what agents send to a proxy that needs no key.
+const noKey = "agentctl-no-key"
+
 // newTokenCmd prints a proxy's client key. Claude Code (apiKeyHelper) and
 // Codex (provider auth command) call it, so keys never sit in their configs.
 func newTokenCmd() *cobra.Command {
@@ -29,8 +32,9 @@ func newTokenCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Agents insist on some credential; a proxy without keys ignores it.
 			if key == "" {
-				return fmt.Errorf("proxy %q has no key configured", args[0])
+				key = noKey
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), key)
 			return err
