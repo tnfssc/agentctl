@@ -24,7 +24,7 @@ TOML
 echo '{"claude_proxy_acknowledged": true}' > "$demo/.config/agentctl/state.json"
 printf 'model = "gpt-6.1-sol"\n' > "$demo/.codex/config.toml"
 printf '{\n  "$schema": "https://opencode.ai/config.json"\n}\n' > "$demo/.config/opencode/opencode.json"
-printf '{\n  "defaultProvider": "openai-codex",\n  "defaultModel": "gpt-6.1-sol"\n}\n' > "$demo/.pi/agent/settings.json"
+printf '{\n  "defaultProvider": "openai",\n  "defaultModel": "o3"\n}\n' > "$demo/.pi/agent/settings.json"
 
 python3 -I "$repo/docs/demo/fakeproxy.py" 18317 &
 echo $! > "$demo/proxy.pid"
