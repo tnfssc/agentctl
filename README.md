@@ -79,6 +79,7 @@ agentctl t3 url https://box.your-tailnet.ts.net   # the address other devices us
 agentctl t3 pair --label phone       # one-time link and QR code for a new device
 agentctl t3 devices                  # paired devices and open links, last seen
 agentctl t3 revoke --idle            # sign out paired devices last connected over 7 days ago
+agentctl t3 uninstall                # remove the service; --all removes t3 too (projects stay)
 ```
 
 Everything goes through T3 Code's own `t3` CLI, so updates started from a T3 Code desktop app reach the server too.

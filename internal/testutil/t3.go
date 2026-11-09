@@ -80,7 +80,8 @@ func (f *FakeT3) Calls(t *testing.T) []string {
 
 // Write replaces one canned reply. Writing "fail" makes every call fail
 // with that message, printed the way t3 prints user errors; writing
-// "nostatus" makes `status` unknown, as before t3 0.1.8.
+// "nostatus" makes `status` unknown, as before t3 0.1.8; writing "stuck"
+// makes uninstalling report success but leave the service.
 func (f *FakeT3) Write(t *testing.T, name, content string) {
 	t.Helper()
 	write(t, filepath.Join(f.Dir, name), content, 0o600)
@@ -120,6 +121,9 @@ case "$*" in
   done
   printf '{"id":"new-link","credential":"TOKEN12CHARS","expiresAt":"2030-01-01T00:05:00Z","pairUrl":"%s/pair#token=TOKEN12CHARS"}\n' "$base" ;;
 "auth "*" revoke "*) echo "Revoked." ;;
+"service uninstall"|"uninstall --yes")
+  [ -f @DIR@/stuck ] || echo '{"service":{"supported":true,"installed":false,"installedVersion":null}}' > @DIR@/status.json
+  echo "Removed the T3 Code service." ;;
 "update"*|"service "*) echo "ok: $*" ;;
 *) echo "fake t3: unexpected $*" >&2; exit 1 ;;
 esac

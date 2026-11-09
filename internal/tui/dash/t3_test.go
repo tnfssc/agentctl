@@ -76,7 +76,7 @@ func TestT3HomeHasNoLayoutShift(t *testing.T) {
 		}
 		sameRects(t, states, "nav:agent:claude", "nav:agent:codex", "nav:t3", "nav:behavior", "nav:proxy:spark", "nav:add",
 			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "status", "hints", "pill")
-		for _, slot := range [][]string{{"t3-devices", "t3-install"}, {"t3-update", "t3-repair", "t3-setup"}, {"t3-restart"}} {
+		for _, slot := range [][]string{{"t3-devices", "t3-install"}, {"t3-update", "t3-setup", "t3-restart"}, {"t3-service"}} {
 			var want *rect
 			for _, s := range states {
 				for _, id := range slot {
@@ -181,7 +181,11 @@ func TestRestartWaitsForTheServer(t *testing.T) {
 	msgs := t3States()
 	m := send(t, base(t, 120, 40), msgs["running"])
 	m.focus = 2
-	m = send(t, m, click("t3-restart"), keyPress("y"), t3DoneMsg{what: "T3 Code restarted"})
+	m = send(t, m, click("t3-service"), keyPress("enter"))
+	if m.dialog != askDialog || m.ask.button != "Restart" {
+		t.Fatalf("Service then enter should ask to restart: dialog %v ask %+v", m.dialog, m.ask)
+	}
+	m = send(t, m, keyPress("y"), t3DoneMsg{what: "T3 Code restarted", wait: true})
 	if m.toast != "T3 Code restarted" || !m.t3Starting {
 		t.Fatalf("after a restart: toast %q starting %v", m.toast, m.t3Starting)
 	}
@@ -204,5 +208,21 @@ func TestNoQRWithoutColor(t *testing.T) {
 	view := ansi.Strip(m.View().Content)
 	if strings.Contains(view, "█") || !strings.Contains(view, "no color") {
 		t.Fatal("without color the dialog should explain the missing QR code, not draw an inverted one")
+	}
+}
+
+func TestUninstallFromServiceMenu(t *testing.T) {
+	m := send(t, base(t, 120, 40), t3States()["running"])
+	m.focus = 2
+	m = send(t, m, click("t3-service"), click("m:opt:2"))
+	if m.dialog != askDialog || m.ask.button != "Uninstall" {
+		t.Fatalf("dialog %v ask %+v", m.dialog, m.ask)
+	}
+	if m = send(t, m, keyPress("n")); m.dialog != noDialog {
+		t.Fatal("n cancels")
+	}
+	m = send(t, m, click("t3-service"), click("m:opt:2"), keyPress("y"), t3DoneMsg{what: "Removed T3 Code's service"})
+	if m.t3Starting || m.toast != "Removed T3 Code's service" {
+		t.Fatalf("after uninstalling nothing restarts: starting %v toast %q", m.t3Starting, m.toast)
 	}
 }

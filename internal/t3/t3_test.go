@@ -3,6 +3,7 @@ package t3_test
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -231,5 +232,25 @@ func TestLinkURLs(t *testing.T) {
 	}
 	if !t3.LocalOnly("http://127.0.0.1:3773") || t3.LocalOnly("https://box.ts.net") {
 		t.Error("LocalOnly misjudged a URL")
+	}
+}
+
+func TestUninstallChecksTheServiceIsGone(t *testing.T) {
+	f := fake(t)
+	f.Write(t, "stuck", "")
+	if err := t3.Uninstall(context.Background(), io.Discard); err == nil || !strings.Contains(err.Error(), "left the background service installed") {
+		t.Fatalf("t3 exits 0 without removing anything; that must not read as success: %v", err)
+	}
+	if err := os.Remove(filepath.Join(f.Dir, "stuck")); err != nil {
+		t.Fatal(err)
+	}
+	if err := t3.Uninstall(context.Background(), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(f.Calls(t), "service uninstall") {
+		t.Fatalf("calls = %v", f.Calls(t))
+	}
+	if err := t3.Uninstall(context.Background(), io.Discard); err == nil || !strings.Contains(err.Error(), "no T3 Code background service") {
+		t.Fatalf("uninstalling twice should say there is nothing to remove: %v", err)
 	}
 }

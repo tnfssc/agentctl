@@ -32,6 +32,7 @@ type (
 	t3DoneMsg struct {
 		what string // toast on success
 		err  error
+		wait bool // the server restarts; wait for it to answer
 	}
 	t3PairedMsg struct {
 		pairing t3.Pairing
@@ -82,9 +83,9 @@ func listAccess(ctx context.Context) tea.Cmd {
 }
 
 // t3Step runs a t3 setup step. Its output is dropped; failures carry t3's
-// message.
-func t3Step(ctx context.Context, done string, step func(context.Context, io.Writer) error) tea.Cmd {
-	return func() tea.Msg { return t3DoneMsg{what: done, err: step(ctx, io.Discard)} }
+// message. wait says the server restarts and should be waited for.
+func t3Step(ctx context.Context, done string, wait bool, step func(context.Context, io.Writer) error) tea.Cmd {
+	return func() tea.Msg { return t3DoneMsg{what: done, err: step(ctx, io.Discard), wait: wait} }
 }
 
 func revoke(ctx context.Context, list []t3.Access) tea.Cmd {
@@ -154,6 +155,9 @@ func (m Model) onT3(msg tea.Msg) (Model, tea.Cmd) {
 			m.toast, m.toastErr = msg.what, false
 			m.busy = "Loading devices"
 			return m, listAccess(m.ctx)
+		}
+		if !msg.wait {
+			return m.close(msg.what, false), inspectT3(m.ctx)
 		}
 		m.t3Starting = true
 		return m.close(msg.what, false), waitT3(m.ctx)
@@ -229,14 +233,14 @@ func (m Model) t3Detail(p skin.Palette) detailView {
 	case !st.Running:
 		d.heading = "Not answering"
 		d.body = "The service is installed but the server does not answer. Restart it, or reinstall the service to repair it."
-		d.buttons = [3]button{{"Devices", "t3-devices", false}, {"Repair", "t3-repair", false}, {"Restart", "t3-restart", true}}
+		d.buttons = [3]button{{"Devices", "t3-devices", false}, {"Restart", "t3-restart", true}, serviceButton}
 	default:
 		d.heading = "Running"
 		if st.Label != "" {
 			d.heading += " as " + st.Label
 		}
 		d.body = "Pair devices with one-time links. Updates started from a T3 Code desktop app reach this server too."
-		d.buttons = [3]button{{"Devices", "t3-devices", true}, {}, {"Restart", "t3-restart", false}}
+		d.buttons = [3]button{{"Devices", "t3-devices", true}, {}, serviceButton}
 		if st.UpdateAvailable() {
 			d.buttons[1] = button{"Update", "t3-update", false}
 		}
@@ -268,6 +272,15 @@ func (m Model) t3Detail(p skin.Palette) detailView {
 	return d
 }
 
+var serviceButton = button{"Service", "t3-service", false}
+
+// serviceOptions are the service dialog's actions, in order.
+var serviceOptions = []option{
+	{label: "Restart", detail: "stops running agent turns", value: "t3-restart"},
+	{label: "Repair", detail: "reinstall the service", value: "t3-repair"},
+	{label: "Uninstall", detail: "projects and threads stay", value: "t3-uninstall"},
+}
+
 // actT3 handles the T3 Code buttons on the home screen.
 func (m Model) actT3(verb string) (tea.Model, tea.Cmd) {
 	switch verb {
@@ -280,19 +293,30 @@ func (m Model) actT3(verb string) (tea.Model, tea.Cmd) {
 		}
 		return m.askT3(askSpec{
 			heading: "Set up T3 Code?", body: body, button: "Install",
-			busy: "Installing T3 Code", run: t3Step(m.ctx, "T3 Code is set up", t3.Install),
+			busy: "Installing T3 Code", run: t3Step(m.ctx, "T3 Code is set up", true, t3.Install),
 		}), nil
 	case "t3-update":
 		return m.askT3(askSpec{
 			heading: "Update to " + m.t3.Latest + "?",
 			body:    "The service restarts on the new version, which stops running agent turns.",
-			button:  "Update", busy: "Updating T3 Code", run: t3Step(m.ctx, "T3 Code updated", t3.Update),
+			button:  "Update", busy: "Updating T3 Code", run: t3Step(m.ctx, "T3 Code updated", true, t3.Update),
 		}), nil
 	case "t3-restart":
 		return m.askT3(askSpec{
 			heading: "Restart T3 Code?", body: "Running agent turns stop.",
-			button: "Restart", busy: "Restarting T3 Code", run: t3Step(m.ctx, "T3 Code restarted", t3.Restart),
+			button: "Restart", busy: "Restarting T3 Code", run: t3Step(m.ctx, "T3 Code restarted", true, t3.Restart),
 		}), nil
+	case "t3-uninstall":
+		return m.askT3(askSpec{
+			heading: "Uninstall T3 Code's background service?",
+			body: "The server stops and no longer starts at boot, and desktop-app updates can't reach it. t3, your " +
+				"projects and threads stay; Set up brings the service back.",
+			button: "Uninstall", busy: "Uninstalling the service", run: t3Step(m.ctx, "Removed T3 Code's service", false, t3.Uninstall),
+		}), nil
+	case "t3-service":
+		m.options, m.pick, m.top = serviceOptions, 0, 0
+		m.dialog = serviceDialog
+		return m, nil
 	case "t3-devices":
 		m.pick = 0
 		m.busy = "Loading devices"

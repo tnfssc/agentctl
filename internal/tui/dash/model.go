@@ -47,6 +47,7 @@ const (
 	devicesDialog         // T3 Code's sessions and pairing links
 	pairFormDialog        // name and address for a new pairing link
 	pairDialog            // the new pairing link and its QR code
+	serviceDialog         // restart, repair or uninstall T3 Code's service
 )
 
 // option is one row of a pick list.
@@ -324,7 +325,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pointerWheel:
 		switch m.dialog {
-		case routeDialog, modelDialog, tuneDialog, devicesDialog:
+		case routeDialog, modelDialog, tuneDialog, devicesDialog, serviceDialog:
 			m.movePick(p.wheel)
 		case confirmDialog, proxyDialog:
 			if p.wheel < 0 {
@@ -380,7 +381,7 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices":
+	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices", "t3-service", "t3-uninstall":
 		return m.actT3(verb)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
@@ -446,6 +447,8 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 			return m, nil
 		case devicesDialog:
 			return m, nil
+		case serviceDialog:
+			return m.act(m.options[i].value)
 		}
 		return m.choose()
 	case "tune-review":
@@ -584,6 +587,18 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.actDialog("revoke-idle")
 		case "p", "enter":
 			return m.actDialog("pair")
+		case "esc", "q":
+			return m.close("", false), nil
+		}
+		return m, nil
+	case serviceDialog:
+		switch k {
+		case "up", "k":
+			m.movePick(-1)
+		case "down", "j":
+			m.movePick(1)
+		case "enter", "space":
+			return m.act(m.options[m.pick].value)
 		case "esc", "q":
 			return m.close("", false), nil
 		}

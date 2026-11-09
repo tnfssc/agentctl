@@ -87,3 +87,17 @@ func TestT3RevokeIdle(t *testing.T) {
 		t.Fatal("an unknown id should fail")
 	}
 }
+
+func TestT3Uninstall(t *testing.T) {
+	_, f := setupT3(t)
+	if _, err := execute(t, "t3", "uninstall"); err == nil {
+		t.Fatal("uninstalling without a terminal needs --yes")
+	}
+	must(t, "t3", "uninstall", "--yes")
+	if !slices.Contains(f.Calls(t), "service uninstall") {
+		t.Fatalf("calls = %v", f.Calls(t))
+	}
+	if out, err := execute(t, "t3", "uninstall", "--yes"); err == nil || !strings.Contains(out, "no T3 Code background service") {
+		t.Fatalf("a second uninstall should say there is nothing to remove: %v\n%s", err, out)
+	}
+}

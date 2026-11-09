@@ -429,6 +429,40 @@ func Restart(ctx context.Context, out io.Writer) error {
 	return stream(ctx, out, bin, home, "service", "restart")
 }
 
+// Uninstall stops and removes the background service. t3, its downloaded
+// versions, and projects and threads stay.
+func Uninstall(ctx context.Context, out io.Writer) error {
+	return uninstall(ctx, out, "service", "uninstall")
+}
+
+// UninstallAll removes t3 from this machine: the service, the launcher and
+// every downloaded version. Projects and threads stay.
+func UninstallAll(ctx context.Context, out io.Writer) error {
+	return uninstall(ctx, out, "uninstall", "--yes")
+}
+
+// uninstall runs a t3 removal and checks it worked: t3 exits 0 when there
+// was no service, or when the service serves another T3 home.
+func uninstall(ctx context.Context, out io.Writer, args ...string) error {
+	st, err := Inspect(ctx)
+	if err != nil {
+		return err
+	}
+	if !st.Installed() {
+		return ErrNotInstalled
+	}
+	if !st.ServiceInstalled && args[0] == "service" {
+		return errors.New("there is no T3 Code background service for " + st.Home)
+	}
+	if err := stream(ctx, out, st.CLI, st.Home, args...); err != nil {
+		return err
+	}
+	if st, err = Inspect(ctx); err == nil && st.ServiceInstalled {
+		return errors.New("t3 " + strings.Join(args, " ") + " left the background service installed")
+	}
+	return err
+}
+
 // setupCLI finds T3's home and the t3 that pick chooses there.
 func setupCLI(ctx context.Context, pick func(context.Context, string) (string, error)) (home, bin string, err error) {
 	if home, err = Home(); err != nil {

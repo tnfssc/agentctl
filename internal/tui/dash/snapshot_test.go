@@ -56,6 +56,7 @@ func TestSnapshots(t *testing.T) {
 	withT3 := send(t, m, t3States()["update"])
 	withT3.focus = 2
 	frames["t3"] = withT3
+	frames["t3-service"] = send(t, withT3, click("t3-service"))
 	devices := send(t, withT3, t3AccessMsg{list: accessList(12)}, keyPress("down"))
 	frames["t3-devices"] = devices
 	pairForm, _ := devices.openPairForm()

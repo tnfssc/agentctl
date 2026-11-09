@@ -190,6 +190,7 @@ var hintTexts = map[dialog]string{
 	devicesDialog:  "p pair · r revoke · i idle · esc",
 	pairFormDialog: "tab next · enter submit · esc",
 	pairDialog:     "c copy · enter done",
+	serviceDialog:  "↑↓ · enter choose · esc back",
 }
 
 var maxHintWidth = func() int {
@@ -611,6 +612,10 @@ func (m Model) drawDialog(sc *scene) {
 		m.drawPairForm(sc)
 	case pairDialog:
 		m.drawPairing(sc)
+	case serviceDialog:
+		m.panel(sc, "T3 Code · service", "Background service", nil, cancel, nil)
+		text([]string{skin.Fg(p.Muted).Render("Runs T3 Code at boot under systemd or launchd; data in " + tildePath(m.t3.Home) + ".")})
+		m.drawOptions(sc, b.X, b.Y+2, m.listRows())
 	}
 }
 

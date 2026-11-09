@@ -220,6 +220,9 @@ func dialogStates(t *testing.T, m Model) []state {
 		}
 		add(fmt.Sprintf("devices %d scrolled", n), dev)
 	}
+	svc := m
+	svc.t3, svc.t3Loaded = t3States()["running"].st, true
+	add("service", send(t, svc, click("t3-service")))
 	pf := send(t, m, t3AccessMsg{list: accessList(3)}, click("m:pair"))
 	add("pair form", pf)
 	add("pair form error", send(t, pf, t3PairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
@@ -267,7 +270,7 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		}
 		var lists, bodies, devices []state
 		for _, s := range states {
-			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") {
+			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") || s.name == "service" {
 				lists = append(lists, s)
 			}
 			if s.m.dialog == devicesDialog {

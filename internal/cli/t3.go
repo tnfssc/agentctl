@@ -34,7 +34,7 @@ func newT3Cmd() *cobra.Command {
 			Use: "status", Short: "Show the server, its version and any update", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return printT3Status(cmd) },
 		},
-		newT3InstallCmd(), newT3UpdateCmd(), newT3RestartCmd(),
+		newT3InstallCmd(), newT3UpdateCmd(), newT3RestartCmd(), newT3UninstallCmd(),
 		newT3PairCmd(), newT3URLCmd(), newT3DevicesCmd(), newT3RevokeCmd(),
 	)
 	return cmd
@@ -221,6 +221,45 @@ func newT3RestartCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "restart without asking")
+	return cmd
+}
+
+func newT3UninstallCmd() *cobra.Command {
+	var all, yes bool
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove T3 Code's background service, or with --all t3 itself",
+		Long: "Stops and removes T3 Code's background service; t3, your projects and threads stay, and\n" +
+			"`agentctl t3 install` brings the service back. With --all, `t3 uninstall` also removes the launcher and\n" +
+			"every downloaded version; projects and threads still stay.",
+		Example: `  agentctl t3 uninstall
+  agentctl t3 uninstall --all`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			u := newUI(cmd)
+			what, step := "Uninstall T3 Code's background service?", t3.Uninstall
+			if all {
+				what, step = "Remove T3 Code from this machine (service, launcher and every downloaded version)?", t3.UninstallAll
+			}
+			if !yes {
+				ok, err := u.confirm(what, "The server stops. Projects and threads stay.")
+				if err != nil || !ok {
+					return err
+				}
+			}
+			if err := step(cmd.Context(), u.err); err != nil {
+				return err
+			}
+			if all {
+				u.ok("T3 Code removed; projects and threads are still in its data folder")
+			} else {
+				u.ok("T3 Code's background service removed")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "also remove t3: the launcher and every downloaded version")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "uninstall without asking")
 	return cmd
 }
 
