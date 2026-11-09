@@ -17,6 +17,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/codex"
 	"github.com/tnfssc/agentctl/internal/agent/opencode"
 	"github.com/tnfssc/agentctl/internal/agent/pi"
+	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tune"
@@ -204,7 +205,7 @@ var hintTexts = map[dialog]string{
 	tuneDialog:     "space toggle · y review · x reset",
 	confirmDialog:  "y apply · n cancel · ↑↓ scroll",
 	addDialog:      "tab next · enter submit · esc",
-	proxyDialog:    "t test · d remove · esc close",
+	proxyDialog:    "t test · a allow · d remove · esc",
 	ackDialog:      "y yes · n no",
 	removeDialog:   "y yes · n no",
 	askDialog:      "y yes · n no",
@@ -213,6 +214,7 @@ var hintTexts = map[dialog]string{
 	pairDialog:     "select the link · c copy · enter done",
 	serviceDialog:  "↑↓ · enter choose · esc back",
 	signingDialog:  "c copy · enter done",
+	allowDialog:    "space toggle · y save · esc",
 }
 
 var maxHintWidth = func() int {
@@ -297,6 +299,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.ocDetail(p)
 	case "git":
 		return m.gitDetail(p)
+	case "self":
+		return m.selfDetail(p)
 	case "behavior":
 		path, _ := tune.InstructionsPath()
 		d := detailView{
@@ -394,7 +398,7 @@ func (m Model) proxyDetail(p skin.Palette, name string) detailView {
 	default:
 		d.heading = fmt.Sprintf("Live · %d models", len(r.Models))
 		d.facts[2] = fact(p, "latency", r.Latency.Round(time.Millisecond).String())
-		d.facts[3] = fact(p, "models", r.Counts.String())
+		d.facts[3] = fact(p, "models", app.CountModels(r.Models, m.cfg.Proxies[name].AllowModels).String())
 		if r.DiscoveryErr != nil || r.SlowDiscovery() {
 			d.facts[4] = skin.Fg(p.Amber).Render("! Claude Code may not list this proxy's models well; see Details")
 		}
@@ -598,7 +602,7 @@ func (m Model) drawDialog(sc *scene) {
 		sc.add(m.vp.View(), b.X, b.Y+confirmChrome, 53, "m:body")
 	case proxyDialog:
 		m.panel(sc, "Proxy · "+m.proxy, "Health and models",
-			[]button{{"Test again", "m:test", false}, {"Remove", "m:rm", false}}, nil, &button{"Close", "m:close-btn", true})
+			[]button{{"Test again", "m:test", false}, {"Allow models", "m:allow", false}}, nil, &button{"Close", "m:close-btn", true})
 		sc.add(m.vp.View(), b.X, b.Y, 53, "m:body")
 	case removeDialog:
 		if who := m.usedBy(m.proxy); who != "" {
@@ -621,6 +625,8 @@ func (m Model) drawDialog(sc *scene) {
 		m.drawPairing(sc)
 	case signingDialog:
 		m.drawSigning(sc)
+	case allowDialog:
+		m.drawAllow(sc)
 	case serviceDialog:
 		if m.svc == svcOpenCode {
 			m.panel(sc, "OpenCode web · server", "Background server", nil, cancel, nil)
@@ -820,7 +826,7 @@ func (m Model) proxyReport(name string) string {
 		default:
 			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code lists the proxy's models")
 		}
-		lines[5] = p.Label("Models · " + r.Counts.String())
+		lines[5] = p.Label("Models · " + app.CountModels(r.Models, px.AllowModels).String()) // the allow list may have changed since
 	}
 	idW, ownerW := width*4/10, 12
 	for _, pm := range r.Models {
@@ -833,7 +839,7 @@ func (m Model) proxyReport(name string) string {
 		case class == models.Other:
 			who = skin.Fg(p.Blue).Render("all agents")
 		default:
-			who = warn.Render("unverified · agentctl proxy allow " + name + " " + pm.ID)
+			who = warn.Render("unverified · Allow models to use it")
 		}
 		lines = append(lines, skin.Fg(p.Text).Render(skin.Cell(pm.ID, idW))+"  "+skin.Fg(p.Dim).Render(skin.Cell(pm.OwnedBy, ownerW))+"  "+who)
 	}

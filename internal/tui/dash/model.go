@@ -1,7 +1,8 @@
 // Package dash is the full-screen dashboard behind bare `agentctl`: see
 // where each agent is routed and which proxies work, switch routes, add,
-// test and remove proxies, and refresh agents' model lists. Everything works
-// with the mouse (click, hover, wheel) and the keyboard.
+// test and remove proxies, allow their unverified models, refresh agents'
+// model lists and update agentctl. Everything works with the mouse (click,
+// hover, wheel) and the keyboard.
 package dash
 
 import (
@@ -26,6 +27,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/selfupdate"
 	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
@@ -51,6 +53,7 @@ const (
 	pairDialog            // the new pairing link and its QR code
 	serviceDialog         // T3 Code's service or OpenCode's server menu
 	signingDialog         // how to set up commit signing with an agent
+	allowDialog           // which unverified models of a proxy every agent may use
 )
 
 // page is what the compact layout shows when no dialog is open.
@@ -93,6 +96,8 @@ type Options struct {
 	// Remote drops hover tracking, for sessions over SSH where every pointer
 	// movement would cost a round trip.
 	Remote bool
+	// Version is agentctl's own; releases ("v…") offer updates.
+	Version string
 }
 
 // Model is the dashboard's Bubble Tea model.
@@ -133,6 +138,15 @@ type Model struct {
 	tuneItems []tune.Status
 	tuneWant  map[string]bool
 
+	allowWant map[string]bool // allowDialog's ticks by model id
+
+	version     string
+	exe         string // the running binary, which an update replaces
+	selfLatest  string
+	selfErr     error
+	selfChecked bool
+	selfUpdated string // the release installed this session
+
 	t3         t3.Status
 	t3Err      error
 	t3Loaded   bool
@@ -159,11 +173,13 @@ type Model struct {
 // New returns the dashboard. ctx bounds all network and file work.
 func New(ctx context.Context, opts Options) Model {
 	m := Model{
-		ctx:    ctx,
-		remote: opts.Remote,
-		probes: map[string]app.Probe{},
-		vp:     viewport.New(),
+		ctx:     ctx,
+		remote:  opts.Remote,
+		version: opts.Version,
+		probes:  map[string]app.Probe{},
+		vp:      viewport.New(),
 	}
+	m.exe, _ = selfupdate.Executable()
 	m.setPalette(true)
 	return m
 }
@@ -173,9 +189,13 @@ func (m *Model) setPalette(isDark bool) {
 	m.diff = theme.New(isDark)
 }
 
-// Init loads config and asks for the background color.
+// Init loads config, asks for the background color and looks for updates.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx))
+	cmds := []tea.Cmd{tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx)}
+	if m.release() {
+		cmds = append(cmds, checkSelf(m.ctx))
+	}
+	return tea.Batch(cmds...)
 }
 
 // needsFrames reports whether anything on screen is animating.
@@ -297,6 +317,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onT3(msg)
 	case ocLoadedMsg, ocDoneMsg:
 		return m.onOC(msg)
+	case selfCheckedMsg, selfUpdatedMsg:
+		return m.onSelf(msg)
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -345,7 +367,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
-	ids = append(ids, "t3", "opencode", "behavior", "git")
+	ids = append(ids, "t3", "opencode", "behavior", "git", "self")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -359,7 +381,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pointerWheel:
 		switch m.dialog {
-		case routeDialog, modelDialog, tuneDialog, devicesDialog, serviceDialog:
+		case routeDialog, modelDialog, tuneDialog, devicesDialog, serviceDialog, allowDialog:
 			m.movePick(p.wheel)
 		case confirmDialog, proxyDialog:
 			if p.wheel < 0 {
@@ -438,6 +460,15 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "self":
+		for _, b := range m.selfDetail(m.pal).buttons {
+			if b.primary {
+				return m.act(b.id)
+			}
+		}
+		return m, nil
+	case "self-check", "self-update":
+		return m.actSelf(verb)
 	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices", "t3-service", "t3-uninstall":
 		return m.actT3(verb)
 	case "oc-start", "oc-restart", "oc-update", "oc-remote", "oc-signout", "oc-stop", "oc-server", "oc-pair":
@@ -505,6 +536,9 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		case tuneDialog:
 			m.toggleTune()
 			return m, nil
+		case allowDialog:
+			m.toggleAllow()
+			return m, nil
 		case devicesDialog:
 			return m, nil
 		case serviceDialog:
@@ -530,6 +564,10 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	case "rm":
 		m.dialog = removeDialog
 		return m, nil
+	case "allow":
+		return m.openAllow(), nil
+	case "allow-save":
+		return m.submitAllow()
 	case "remove":
 		if m.usedBy(m.proxy) != "" {
 			return m.close("", false), nil
@@ -646,10 +684,26 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.actDialog("test")
 		case k == "d" && m.dialog == proxyDialog:
 			return m.actDialog("rm")
+		case k == "a" && m.dialog == proxyDialog:
+			return m.actDialog("allow")
 		}
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
+	case allowDialog:
+		switch k {
+		case "up", "k":
+			m.movePick(-1)
+		case "down", "j":
+			m.movePick(1)
+		case "space", "enter":
+			m.toggleAllow()
+		case "y":
+			return m.actDialog("allow-save")
+		case "esc":
+			return m.close("", false), nil
+		}
+		return m, nil
 	case askDialog:
 		switch k {
 		case "y", "enter":
@@ -810,13 +864,17 @@ func (m Model) onModels(msg modelsMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 	m.busy = ""
+	var reload tea.Cmd
+	if msg.saved != "" {
+		reload = load // the plan came with a config change
+	}
 	switch {
 	case errors.Is(msg.err, app.ErrNothingToRefresh):
-		return m.close("No agent is routed through a proxy; nothing to refresh", false), nil
+		return m.close(msg.saved+"No agent is routed through a proxy; nothing to refresh", false), reload
 	case msg.err != nil:
-		return m.close(msg.err.Error(), true), nil
+		return m.close(msg.err.Error(), true), reload
 	case msg.plan.Empty() && msg.refresh:
-		return m.close("Model lists are already up to date", false), nil
+		return m.close(msg.saved+"Model lists are already up to date", false), reload
 	case msg.plan.Empty() && msg.plan.Route == "":
 		return m.close(title(msg.plan.Agent)+" settings already match; nothing to change", false), nil
 	case msg.plan.Empty():
@@ -832,7 +890,7 @@ func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 	m.sizeDialog()
 	// Warnings have their own fixed rows above the diff (see drawDialog).
 	m.setReport(m.diff.Diff(msg.plan.Diff()))
-	return m, nil
+	return m, reload
 }
 
 func (m Model) openProxy(name string) Model {

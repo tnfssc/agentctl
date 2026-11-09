@@ -14,6 +14,9 @@ types a model by hand is on their own).
 - Non-Claude only if `owned_by` is a single-vendor owner (openai, google, xai, …). `antigravity` serves `claude-*`
   under its own owner, OpenAI-compat providers carry the user's provider name, aliases copy the original's owner but
   can have any id. Codenames churn (e.g. daybreak-blue/red are OpenAI's cyber program aliases).
+- The dashboard's proxy dialog has Allow models: a checklist of only the Unknown chat models (Claude-looking ids never
+  appear), saved to the same `allow_models`, then a model-list refresh plan. Entries for models the proxy no longer
+  serves are kept.
 - With a management key (not done yet): models served by a `claude` credential (`auth-files/models?name=`) and the
   alias map (`oauth-model-alias`) close the Antigravity and alias holes.
 - CPA's model registry (router-for-me/models, refreshed every 3h) is grouped by credential type with no vendor field.

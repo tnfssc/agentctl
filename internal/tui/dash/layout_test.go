@@ -111,6 +111,26 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = strings.Repeat("something failed ", 20), true
 		states = append(states, state{"busy", busy}, state{"toast", toast})
+		for _, c := range []struct {
+			name    string
+			version string
+			msg     tea.Msg
+		}{
+			{"self checking", "v1.4.0", nil},
+			{"self update", "v1.4.0", selfCheckedMsg{latest: "v1.5.0"}},
+			{"self latest", "v1.5.0", selfCheckedMsg{latest: "v1.5.0"}},
+			{"self offline", "v1.5.0", selfCheckedMsg{err: errors.New(strings.Repeat("offline ", 20))}},
+			{"self source", "dev", nil},
+		} {
+			s := m
+			s.version = c.version
+			if c.msg != nil {
+				s = send(t, s, c.msg)
+			}
+			s = focusOn(s, "self")
+			s.page = pageDetail
+			states = append(states, state{c.name, s})
+		}
 
 		// The frame never moves, whatever is selected.
 		sameRects(t, states, "status", "hints", "more", "nav:add",
@@ -121,8 +141,8 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		}
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
-			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions"},
-			{"local:codex", "refresh"},
+			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions", "self-update"},
+			{"local:codex", "refresh", "self-check"},
 			{"tune:claude", "tune:codex", "rm:spark"},
 		} {
 			var placed []state
@@ -193,6 +213,23 @@ func dialogStates(t *testing.T, m Model) []state {
 	for _, ps := range probeStates(t, proxyDialog) {
 		add("proxy "+ps.name, ps.m)
 	}
+	allow := send(t, m, probedMsg{name: "spark", probe: mixed}, click("details:spark"), click("m:allow"))
+	add("allow", allow)
+	add("allow toggled", send(t, allow, keyPress("space"), keyPress("down")))
+	add("allow empty", send(t, m, click("details:spark"), click("m:allow")))
+	many := live(true)
+	for i := range many.Models {
+		many.Models[i].OwnedBy = "Writer"
+	}
+	allowMany := send(t, m, probedMsg{name: "spark", probe: many}, click("details:spark"), click("m:allow"))
+	add("allow many", allowMany)
+	for range 40 {
+		allowMany = send(t, allowMany, keyPress("down"))
+	}
+	add("allow many scrolled", allowMany)
+	self := m
+	self.version = "v1.4.0"
+	add("ask self", send(t, self, selfCheckedMsg{latest: "v1.5.0"}, click("self-update")))
 	add("remove", send(t, m, click("rm:spark")))
 	inUse := loaded()
 	inUse.statuses[1].status.Route = "spark"
@@ -273,7 +310,7 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 			"m:input:0", "m:input:1", "m:input:2", "m:error", "m:info", "m:url")
 		// Each slot holds different buttons per dialog.
 		for _, slot := range [][]string{
-			{"m:ack", "m:apply", "m:submit", "m:tune-review", "m:remove", "m:close-btn", "m:yes", "m:pair", "m:submit-pair"},
+			{"m:ack", "m:apply", "m:submit", "m:tune-review", "m:remove", "m:close-btn", "m:yes", "m:pair", "m:submit-pair", "m:allow-save"},
 			{"m:cancel", "m:revoke-idle"},
 			{"m:back", "m:test", "m:tune-reset", "m:revoke", "m:copy", "m:copy-guide"},
 		} {
@@ -292,7 +329,8 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		}
 		var lists, bodies, devices []state
 		for _, s := range states {
-			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") || strings.HasPrefix(s.name, "service") {
+			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") || strings.HasPrefix(s.name, "service") ||
+				strings.HasPrefix(s.name, "allow ") || s.name == "allow" {
 				lists = append(lists, s)
 			}
 			if s.m.dialog == devicesDialog {

@@ -54,6 +54,9 @@ must keep this; tests in `internal/tui/dash` check it.
 
 ## Dashboard
 
+Everything the CLI can do, the dashboard can do too; a feature isn't done until both have it. Plumbing that only
+agents or shells call (`token`, `completion`) is the exception.
+
 Bare `agentctl` opens a small dashboard (`internal/tui/dash`, look in `internal/tui/skin`, after voidzero.dev):
 hairlines, a sidebar, a detail pane, outlined buttons, mouse click/hover/wheel via `View().OnMouse` and compositor
 hit testing. Keep it simple and cheap over SSH: nothing animates except spinners while loading, an idle dashboard

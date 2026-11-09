@@ -111,6 +111,8 @@ var shortLabels = map[string]string{
 	"Copy command":     "Copy",
 	"Switch route":     "Switch",
 	"Set up service":   "Set up",
+	"Allow models":     "Allow",
+	"Check again":      "Check",
 }
 
 // fit picks the label to show in a button slot width cells wide.

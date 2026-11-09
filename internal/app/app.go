@@ -293,6 +293,25 @@ func (c Counts) String() string {
 	return s
 }
 
+// CountModels sorts models by who may use them, given a proxy's allow list.
+func CountModels(list []proxy.Model, allow []string) Counts {
+	var c Counts
+	for _, m := range list {
+		class := models.Classify(m.ID, m.OwnedBy, allow)
+		switch {
+		case class == models.Anthropic:
+			c.Claude++
+		case !models.Chat(m.ID):
+			c.NotChat++
+		case class == models.Other:
+			c.Other++
+		default:
+			c.Unknown++
+		}
+	}
+	return c
+}
+
 // Err reports whether the proxy is unusable.
 func (p Probe) Err() error { return errors.Join(p.HealthErr, p.ModelsErr) }
 
@@ -327,20 +346,10 @@ func ProbeProxy(ctx context.Context, p config.Proxy) Probe {
 		}
 		return r
 	}
+	r.Counts = CountModels(r.Models, p.AllowModels)
 	plain := map[string]bool{}
 	for _, m := range r.Models {
 		plain[m.ID] = true
-		class := models.Classify(m.ID, m.OwnedBy, p.AllowModels)
-		switch {
-		case class == models.Anthropic:
-			r.Counts.Claude++
-		case !models.Chat(m.ID):
-			r.Counts.NotChat++
-		case class == models.Other:
-			r.Counts.Other++
-		default:
-			r.Counts.Unknown++
-		}
 	}
 	start = time.Now()
 	seen, err := c.ModelsAsClaudeCode(ctx, key)

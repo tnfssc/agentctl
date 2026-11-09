@@ -16,7 +16,7 @@ func overSSH() bool {
 
 // runInteractive opens the dashboard; bare `agentctl` in a terminal.
 func runInteractive(ctx context.Context, u *ui) error {
-	_, err := tea.NewProgram(dash.New(ctx, dash.Options{Remote: overSSH()}),
+	_, err := tea.NewProgram(dash.New(ctx, dash.Options{Remote: overSSH(), Version: buildVersion()}),
 		tea.WithContext(ctx),
 		tea.WithInput(u.in),
 		tea.WithOutput(u.out),

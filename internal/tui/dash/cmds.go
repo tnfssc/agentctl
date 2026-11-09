@@ -36,6 +36,7 @@ type (
 		plan    agent.Plan
 		err     error
 		refresh bool
+		saved   string // what was saved before planning, as the start of a toast
 	}
 	appliedMsg struct {
 		plan      agent.Plan

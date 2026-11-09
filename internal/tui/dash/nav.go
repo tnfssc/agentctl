@@ -9,7 +9,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 )
 
-// The home list: agents, servers, behavior and proxies as two-line items under
+// The home list: agents, servers, behavior, agentctl and proxies as two-line items under
 // section labels. It is the sidebar in the wide layout and the whole home
 // page in the compact one. It scrolls inside a window whose size comes from
 // the terminal alone, with one row kept for "more" hints and "Add a proxy"
@@ -39,6 +39,7 @@ func (m Model) navEntries(p skin.Palette) []navEntry {
 		serverEntry(p, "opencode", "OpenCode web", m.ocState(), m.ocNavDetail()),
 		navEntry{id: "behavior", section: "Behavior", icon: "◇", label: "Instructions", detail: "all agents"},
 		navEntry{id: "git", section: "Behavior", icon: "◇", label: "Git", detail: m.signingState()},
+		m.selfEntry(p),
 	)
 	for _, n := range m.cfg.Names() {
 		out = append(out, navEntry{id: "proxy:" + n, section: "Proxies", icon: "●", label: n, detail: m.proxyState(n), dot: m.proxyDot(p, n)})
