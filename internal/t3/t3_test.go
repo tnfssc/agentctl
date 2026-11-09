@@ -3,6 +3,7 @@ package t3_test
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -52,6 +53,47 @@ func TestInspectIgnoresAnotherHomesService(t *testing.T) {
 	}
 	if st.Version == "" || st.OnLatest() {
 		t.Fatalf("running %q, so it's behind %q: %+v", st.Version, st.Latest, st)
+	}
+}
+
+func TestNewestCLIForSetupServiceVersionForAuth(t *testing.T) {
+	f := fake(t)
+	// A Mac with a desktop app on a newer nightly than its service.
+	newer := filepath.Join(f.Home, "bin", "t3")
+	f.AddCLI(t, newer, testutil.T3Nightly, "desktop")
+	st, err := t3.Inspect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.CLI != newer {
+		t.Fatalf("status should use the newest t3, got %s", st.CLI)
+	}
+	if _, err := t3.ListAccess(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := t3.Update(context.Background(), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.Calls(t)
+	for _, want := range []string{"desktop: status --json", "auth session list --json", "desktop: update --channel nightly --yes"} {
+		if !slices.Contains(calls, want) {
+			t.Errorf("missing call %q in %v", want, calls)
+		}
+	}
+	if slices.Contains(calls, "desktop: auth session list --json") {
+		t.Error("auth commands must use the service's version: a newer t3 would migrate its database")
+	}
+}
+
+func TestInspectWithoutStatusCommand(t *testing.T) {
+	f := fake(t)
+	f.Write(t, "nostatus", "")
+	st, err := t3.Inspect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.ServiceInstalled || st.ServiceVersion != testutil.T3Version || !st.Running {
+		t.Fatalf("an old t3 without status should still read as installed and running: %+v", st)
 	}
 }
 

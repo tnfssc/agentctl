@@ -69,7 +69,7 @@ type wireLink struct {
 // ListAccess returns unused pairing links, then sessions, most recently
 // seen first.
 func ListAccess(ctx context.Context) ([]Access, error) {
-	home, bin, err := setupCLI()
+	home, bin, err := setupCLI(ctx, authCLI)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func lastActive(a Access) time.Time {
 // Revoke ends a session or cancels an unused link. Revoking one that is
 // already gone is not an error.
 func Revoke(ctx context.Context, a Access) error {
-	home, bin, err := setupCLI()
+	home, bin, err := setupCLI(ctx, authCLI)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ const DefaultTTL = 5 * time.Minute
 // Pair mints a one-time pairing link on base, the URL devices use to reach
 // the server.
 func Pair(ctx context.Context, label, base string, ttl time.Duration) (Pairing, error) {
-	home, bin, err := setupCLI()
+	home, bin, err := setupCLI(ctx, authCLI)
 	if err != nil {
 		return Pairing{}, err
 	}

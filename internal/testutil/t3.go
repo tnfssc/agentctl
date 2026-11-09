@@ -43,8 +43,7 @@ func T3(t *testing.T, home string) *FakeT3 {
 	f.Server = httptest.NewServer(mux)
 	t.Cleanup(f.Server.Close)
 
-	bin := filepath.Join(f.Home, "runtime", "versions", T3Version, "t3")
-	write(t, bin, strings.ReplaceAll(fakeT3Script, "@DIR@", f.Dir), 0o755)
+	f.writeCLI(t, filepath.Join(f.Home, "runtime", "versions", T3Version, "t3"), T3Version, "")
 	write(t, filepath.Join(f.Home, "runtime", "service-state.json"),
 		`{"protocol":3,"activeVersion":"`+T3Version+`"}`, 0o600)
 	write(t, filepath.Join(f.Home, "userdata", "server-runtime.json"),
@@ -54,6 +53,19 @@ func T3(t *testing.T, home string) *FakeT3 {
 	write(t, filepath.Join(f.Dir, "links.json"), "[]", 0o600)
 	write(t, filepath.Join(f.Dir, "sessions.json"), "[]", 0o600)
 	return f
+}
+
+// AddCLI puts another fake t3 at path, e.g. a newer one on PATH. Its calls
+// are logged as "<tag>: <args>".
+func (f *FakeT3) AddCLI(t *testing.T, path, version, tag string) {
+	t.Helper()
+	f.writeCLI(t, path, version, tag+": ")
+}
+
+func (f *FakeT3) writeCLI(t *testing.T, path, version, tag string) {
+	t.Helper()
+	script := strings.NewReplacer("@DIR@", f.Dir, "@VERSION@", version, "@TAG@", tag).Replace(fakeT3Script)
+	write(t, path, script, 0o755)
 }
 
 // Calls returns each t3 invocation's arguments, one line per call.
@@ -67,7 +79,8 @@ func (f *FakeT3) Calls(t *testing.T) []string {
 }
 
 // Write replaces one canned reply. Writing "fail" makes every call fail
-// with that message, printed the way t3 prints user errors.
+// with that message, printed the way t3 prints user errors; writing
+// "nostatus" makes `status` unknown, as before t3 0.1.8.
 func (f *FakeT3) Write(t *testing.T, name, content string) {
 	t.Helper()
 	write(t, filepath.Join(f.Dir, name), content, 0o600)
@@ -84,7 +97,12 @@ func write(t *testing.T, path, content string, perm os.FileMode) {
 }
 
 const fakeT3Script = `#!/bin/sh
-echo "$*" >> @DIR@/calls
+if [ "$*" = "--version" ]; then echo "t3 v@VERSION@"; exit 0; fi
+echo "@TAG@$*" >> @DIR@/calls
+if [ -f @DIR@/nostatus ] && [ "$1" = "status" ]; then
+  printf '\nERROR\n  Unrecognized flag: --json in command t3\n' >&2
+  exit 1
+fi
 if [ -f @DIR@/fail ]; then
   # How t3 prints a user error.
   printf '\nERROR\n  %s\n' "$(cat @DIR@/fail)" >&2

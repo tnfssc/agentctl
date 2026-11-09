@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,17 +79,13 @@ func readJSON(path string, v any) error {
 	return json.Unmarshal(b, v)
 }
 
-// runtimeBinary is the service's own runtime, if the service has one.
-func runtimeBinary(home string) string {
+// activeVersion is the version the service is set to run, "" without one.
+func activeVersion(home string) string {
 	var st serviceState
-	if readJSON(filepath.Join(home, "runtime", "service-state.json"), &st) != nil || st.ActiveVersion == "" {
+	if readJSON(filepath.Join(home, "runtime", "service-state.json"), &st) != nil {
 		return ""
 	}
-	bin := filepath.Join(home, "runtime", "versions", st.ActiveVersion, "t3")
-	if isExec(bin) {
-		return bin
-	}
-	return ""
+	return st.ActiveVersion
 }
 
 func isExec(path string) bool {
@@ -96,27 +93,84 @@ func isExec(path string) bool {
 	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
 }
 
-// cli is the t3 to run: the service's own runtime first, then the one on
-// PATH or where the installer puts it, then the desktop app's shim.
-//
-// The service's runtime comes first because the others fall behind it: a
-// desktop-triggered update moves only the service. An older CLI refuses
-// `service install` as a downgrade, and `t3 auth` migrates the database to
-// its own version, so every call should be the service's version.
-func cli(home string) (string, error) {
-	if bin := runtimeBinary(home); bin != "" {
-		return bin, nil
-	}
-	if p, err := exec.LookPath("t3"); err == nil {
-		return p, nil
-	}
+// binary is one t3 CLI on this machine.
+type binary struct{ path, version string }
+
+// binaries finds every t3 CLI: the service's runtime, the one on PATH, the
+// installer's ~/.local/bin/t3 and the desktop app's shim. They can be on
+// different versions: a desktop app updates itself and its shim, a service
+// updated from a desktop app moves only the runtime, and a service nobody
+// updates stays behind (seen on a Mac: desktop 0.1.8, service 0.1.3).
+func binaries(ctx context.Context, home string) []binary {
 	userHome, _ := os.UserHomeDir()
-	for _, p := range []string{filepath.Join(userHome, ".local", "bin", "t3"), filepath.Join(home, "bin", "t3")} {
-		if isExec(p) {
-			return p, nil
+	paths := []string{filepath.Join(home, "bin", "t3"), filepath.Join(userHome, ".local", "bin", "t3")}
+	if p, err := exec.LookPath("t3"); err == nil {
+		paths = append(paths, p)
+	}
+	if v := activeVersion(home); v != "" {
+		paths = append(paths, filepath.Join(home, "runtime", "versions", v, "t3"))
+	}
+	var found []binary
+	seen := map[string]bool{}
+	for _, p := range paths {
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil || seen[real] || !isExec(real) {
+			continue
+		}
+		seen[real] = true
+		if v := versionOf(ctx, real); v != "" {
+			found = append(found, binary{p, v})
 		}
 	}
-	return "", ErrNotInstalled
+	return found
+}
+
+// versionOf reads a version from a runtime's path, else asks the binary.
+func versionOf(ctx context.Context, path string) string {
+	if dir := filepath.Dir(path); filepath.Base(filepath.Dir(dir)) == "versions" {
+		return filepath.Base(dir)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--version").Output() //nolint:gosec // a t3 found by binaries
+	if err != nil {
+		return ""
+	}
+	_, v, ok := strings.Cut(strings.TrimSpace(string(out)), " v")
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+// cli is the newest t3 here, for status, updates and the service: a newer
+// CLI knows more commands, and an older one refuses `service install` as a
+// downgrade.
+func cli(ctx context.Context, home string) (string, error) {
+	var best binary
+	for _, b := range binaries(ctx, home) {
+		if best.path == "" || CompareVersions(b.version, best.version) > 0 {
+			best = b
+		}
+	}
+	if best.path == "" {
+		return "", ErrNotInstalled
+	}
+	return best.path, nil
+}
+
+// authCLI is the t3 for `t3 auth` commands: the service's version when
+// there is one. They open the database directly and migrate it to their
+// own version, which a server on an older version can't read.
+func authCLI(ctx context.Context, home string) (string, error) {
+	if v := activeVersion(home); v != "" {
+		for _, b := range binaries(ctx, home) {
+			if b.version == v {
+				return b.path, nil
+			}
+		}
+	}
+	return cli(ctx, home)
 }
 
 // run executes t3 with T3CODE_HOME pinned and returns stdout.
@@ -227,12 +281,18 @@ func Inspect(ctx context.Context) (Status, error) {
 	}
 	s := Status{Home: home}
 	s.Latest, s.LatestErr = latest(ctx)
-	if s.CLI, _ = cli(home); s.CLI == "" {
+	if s.CLI, _ = cli(ctx, home); s.CLI == "" {
 		return s, nil // not installed is a state, not an error
 	}
 
 	out, err := run(ctx, s.CLI, home, "status", "--json")
-	if err != nil {
+	switch {
+	case err != nil && strings.Contains(err.Error(), "Unrecognized"):
+		// t3 before 0.1.8 has no `status`; the service's state file says
+		// as much as we need.
+		out = []byte(`{"service":{"supported":true,"installed":` + strconv.FormatBool(activeVersion(home) != "") +
+			`,"installedVersion":"` + activeVersion(home) + `"}}`)
+	case err != nil:
 		return s, err
 	}
 	var st struct {
@@ -311,12 +371,12 @@ func Install(ctx context.Context, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := cli(home); errors.Is(err, ErrNotInstalled) {
+	if _, err := cli(ctx, home); errors.Is(err, ErrNotInstalled) {
 		if err := runInstaller(ctx, out, home); err != nil {
 			return err
 		}
 	}
-	bin, err := cli(home)
+	bin, err := cli(ctx, home)
 	if err != nil {
 		return err
 	}
@@ -353,7 +413,7 @@ func runInstaller(ctx context.Context, out io.Writer, home string) error {
 // Update moves t3 and the service to the newest nightly. The service
 // restarts, which stops running agent turns.
 func Update(ctx context.Context, out io.Writer) error {
-	home, bin, err := setupCLI()
+	home, bin, err := setupCLI(ctx, cli)
 	if err != nil {
 		return err
 	}
@@ -362,17 +422,18 @@ func Update(ctx context.Context, out io.Writer) error {
 
 // Restart restarts the background service, which stops running agent turns.
 func Restart(ctx context.Context, out io.Writer) error {
-	home, bin, err := setupCLI()
+	home, bin, err := setupCLI(ctx, cli)
 	if err != nil {
 		return err
 	}
 	return stream(ctx, out, bin, home, "service", "restart")
 }
 
-func setupCLI() (home, bin string, err error) {
+// setupCLI finds T3's home and the t3 that pick chooses there.
+func setupCLI(ctx context.Context, pick func(context.Context, string) (string, error)) (home, bin string, err error) {
 	if home, err = Home(); err != nil {
 		return "", "", err
 	}
-	bin, err = cli(home)
+	bin, err = pick(ctx, home)
 	return home, bin, err
 }
