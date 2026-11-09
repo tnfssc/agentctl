@@ -207,3 +207,13 @@ func TestGuideAndTuneGit(t *testing.T) {
 		t.Fatalf("reset should remove the config agentctl created: %v", err)
 	}
 }
+
+func TestUpdateRefusesSourceBuilds(t *testing.T) {
+	testutil.Home(t)
+	prev := version
+	version = ""
+	t.Cleanup(func() { version = prev })
+	if _, err := execute(t, "update", "--check"); err == nil || !strings.Contains(err.Error(), "built from source") {
+		t.Fatalf("a dev build must not update itself: %v", err)
+	}
+}

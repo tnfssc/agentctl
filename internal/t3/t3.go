@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/tnfssc/agentctl/internal/semver"
 )
 
 // Channel is the release train agentctl installs and updates to.
@@ -149,7 +151,7 @@ func versionOf(ctx context.Context, path string) string {
 func cli(ctx context.Context, home string) (string, error) {
 	var best binary
 	for _, b := range binaries(ctx, home) {
-		if best.path == "" || CompareVersions(b.version, best.version) > 0 {
+		if best.path == "" || semver.Compare(b.version, best.version) > 0 {
 			best = b
 		}
 	}
@@ -265,7 +267,7 @@ func (s Status) CurrentVersion() string {
 // UpdateAvailable reports whether a newer nightly exists than what runs.
 func (s Status) UpdateAvailable() bool {
 	cur := s.CurrentVersion()
-	return s.Latest != "" && cur != "" && CompareVersions(s.Latest, cur) > 0
+	return s.Latest != "" && cur != "" && semver.Compare(s.Latest, cur) > 0
 }
 
 // OnLatest reports whether what runs is known to be the newest nightly.

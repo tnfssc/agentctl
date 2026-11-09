@@ -31,7 +31,8 @@ curl -fsSL https://github.com/tnfssc/agentctl/releases/latest/download/install.s
 ```
 
 Downloads the matching binary, verifies its SHA-256 checksum and installs to `~/.local/bin` without sudo.
-Add that directory to your PATH if needed, then run `agentctl`. Run the same command to update.
+Add that directory to your PATH if needed, then run `agentctl`. Update with `agentctl update` (from v1.1.0; before
+that, run the install command again).
 
 For a specific version or install directory:
 

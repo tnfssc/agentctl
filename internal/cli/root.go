@@ -51,7 +51,7 @@ func newRootCmd() *cobra.Command {
 			return printStatus(u)
 		},
 	}
-	root.AddCommand(newProxyCmd(), newUseCmd(), newRefreshCmd(), newTuneCmd(), newGuideCmd(), newT3Cmd(), newStatusCmd(), newTokenCmd())
+	root.AddCommand(newProxyCmd(), newUseCmd(), newRefreshCmd(), newTuneCmd(), newGuideCmd(), newT3Cmd(), newUpdateCmd(), newStatusCmd(), newTokenCmd())
 	return root
 }
 
