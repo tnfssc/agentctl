@@ -14,8 +14,10 @@ description = "Build release binaries and SHA256SUMS (pass vX.Y.Z)"
 run = "sh scripts/release-build.sh"
 
 [tasks.install]
-description = "Install agentctl into $GOBIN (~/go/bin)"
-run = "go install -trimpath -ldflags \"-X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" ./cmd/agentctl"
+# Where install.sh puts it, not $GOBIN: mise's Go sets GOBIN to its own toolchain directory, which comes first on PATH
+# and would shadow the installed agentctl.
+description = "Install agentctl where install.sh does: $AGENTCTL_INSTALL_DIR, else ~/.local/bin"
+run = "go build -trimpath -ldflags \"-X github.com/tnfssc/agentctl/internal/cli.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/tnfssc/agentctl/internal/cli.commit=$(git rev-parse --short HEAD 2>/dev/null)\" -o \"${AGENTCTL_INSTALL_DIR:-$HOME/.local/bin}/agentctl\" ./cmd/agentctl"
 
 [tasks.test]
 description = "Run tests with the race detector"
