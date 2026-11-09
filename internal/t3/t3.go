@@ -113,12 +113,12 @@ func binaries(ctx context.Context, home string) []binary {
 	var found []binary
 	seen := map[string]bool{}
 	for _, p := range paths {
-		real, err := filepath.EvalSymlinks(p)
-		if err != nil || seen[real] || !isExec(real) {
+		target, err := filepath.EvalSymlinks(p)
+		if err != nil || seen[target] || !isExec(target) {
 			continue
 		}
-		seen[real] = true
-		if v := versionOf(ctx, real); v != "" {
+		seen[target] = true
+		if v := versionOf(ctx, target); v != "" {
 			found = append(found, binary{p, v})
 		}
 	}
