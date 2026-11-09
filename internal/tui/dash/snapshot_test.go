@@ -11,6 +11,7 @@ import (
 
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/t3"
 )
 
 // TestSnapshots writes rendered frames as ANSI files for eyeballing, e.g.
@@ -35,20 +36,33 @@ func TestSnapshots(t *testing.T) {
 	routes := send(t, m, keyPress("down"), keyPress("enter"))
 	frames["routes"] = routes
 	frames["models"] = send(t, routes, keyPress("down"), keyPress("enter"), modelsMsg{route: "spark", list: r.Models})
-	frames["proxy"] = send(t, m, keyPress("down"), keyPress("down"), keyPress("enter"))
+	proxyFocus := m
+	proxyFocus.focus = 4
+	frames["proxy"] = send(t, proxyFocus, keyPress("enter"))
 	add, _ := m.openAdd()
 	frames["add"] = add.(Model)
 	hover := m
 	hover.hover = "switch:claude"
 	frames["hover"] = hover
 	selected := m
-	selected.focus = 3
+	selected.focus = 4
 	frames["selected-proxy"] = selected
 	routed := send(t, m, loadedMsg{cfg: m.cfg, st: m.st, statuses: []agentStatus{
 		m.statuses[0], {agent: m.statuses[1].agent, status: app.Status{Route: "spark", URL: "https://spark.example:8445", Model: "gpt-6.1-sol"}},
 	}})
 	routed.focus = 1
 	frames["routed-codex"] = routed
+
+	withT3 := send(t, m, t3States()["update"])
+	withT3.focus = 2
+	frames["t3"] = withT3
+	devices := send(t, withT3, t3AccessMsg{list: accessList(12)}, keyPress("down"))
+	frames["t3-devices"] = devices
+	pairForm, _ := devices.openPairForm()
+	frames["t3-pair-form"] = pairForm.(Model)
+	frames["t3-pairing"] = send(t, withT3, t3PairedMsg{pairing: t3.Pairing{
+		URL: "https://minipc.tail035df.ts.net/pair#token=P3BRPMVCDGYE", Expires: time.Now().Add(5 * time.Minute),
+	}})
 
 	for name, f := range frames {
 		out := f.View().Content

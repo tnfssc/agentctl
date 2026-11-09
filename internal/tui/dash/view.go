@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -176,15 +177,19 @@ func (m Model) drawPage(sc *scene) {
 }
 
 var hintTexts = map[dialog]string{
-	noDialog:      "↑↓ select · enter open · q quit",
-	routeDialog:   "↑↓ · enter choose · esc back",
-	modelDialog:   "↑↓ · enter choose · esc back",
-	tuneDialog:    "space toggle · y review · x reset",
-	confirmDialog: "y apply · n cancel · ↑↓ scroll",
-	addDialog:     "tab next · enter submit · esc",
-	proxyDialog:   "t test · d remove · esc close",
-	ackDialog:     "y yes · n no",
-	removeDialog:  "y yes · n no",
+	noDialog:       "↑↓ select · enter open · q quit",
+	routeDialog:    "↑↓ · enter choose · esc back",
+	modelDialog:    "↑↓ · enter choose · esc back",
+	tuneDialog:     "space toggle · y review · x reset",
+	confirmDialog:  "y apply · n cancel · ↑↓ scroll",
+	addDialog:      "tab next · enter submit · esc",
+	proxyDialog:    "t test · d remove · esc close",
+	ackDialog:      "y yes · n no",
+	removeDialog:   "y yes · n no",
+	askDialog:      "y yes · n no",
+	devicesDialog:  "p pair · r revoke · i idle · esc",
+	pairFormDialog: "tab next · enter submit · esc",
+	pairDialog:     "c copy · enter done",
 }
 
 var maxHintWidth = func() int {
@@ -241,7 +246,7 @@ func (m Model) proxyWindow(listTop, bottom int) (first, rows int) {
 	if len(names) <= rows {
 		return 0, rows
 	}
-	sel := m.focus - len(m.statuses) - 1 // agents, then the behavior row
+	sel := m.focus - len(m.statuses) - 2 // agents, T3 Code, then the behavior row
 	first = max(0, min(sel-rows+1, len(names)-rows))
 	return first, rows
 }
@@ -268,6 +273,8 @@ func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
 		row(y, "agent:"+as.agent.Name, "◆", as.agent.Title, 11, detail)
 		y++
 	}
+	row(y, "t3", "◆", "T3 Code", 11, m.t3State())
+	y++
 	y++
 	sc.add(p.Label("Behavior"), 3, y, 1, "")
 	row(y+2, "behavior", "◇", "Instructions", 11, "all agents")
@@ -341,6 +348,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.agentDetail(p, m.statusOf(name))
 	case "proxy":
 		return m.proxyDetail(p, name)
+	case "t3":
+		return m.t3Detail(p)
 	case "behavior":
 		path, _ := tune.InstructionsPath()
 		d := detailView{
@@ -445,24 +454,32 @@ func tildePath(path string) string {
 // bottom (extras from the left, Cancel and the primary action from the
 // right). Bodies scroll or truncate inside their area.
 
+const (
+	maxDialogH   = 30
+	dialogChrome = 9 // shell rows that are not body: border, label, heading, gaps, buttons
+)
+
 func (m Model) dialogRect() rect {
 	w := max(62, min(88, m.width-10))
-	h := min(30, m.height-2)
+	h := min(maxDialogH, m.height-2)
 	return rect{(m.width - w) / 2, (m.height - h) / 2, w, h}
 }
 
 // dialogBody is the area inside the shell for a dialog's content.
 func (m Model) dialogBody() rect {
 	d := m.dialogRect()
-	return rect{d.X + 3, d.Y + 4, d.W - 6, d.H - 9}
+	return rect{d.X + 3, d.Y + 4, d.W - 6, d.H - dialogChrome}
 }
 
 // listRows is how many options a pick dialog shows at once; it depends on
 // the terminal size only.
 func (m Model) listRows() int {
 	b := m.dialogBody()
-	if m.dialog == tuneDialog {
+	switch m.dialog {
+	case tuneDialog:
 		return max(1, b.H-tuneChrome)
+	case devicesDialog:
+		return m.devicesRows()
 	}
 	return max(1, b.H-3)
 }
@@ -585,6 +602,15 @@ func (m Model) drawDialog(sc *scene) {
 		text(skin.Clip("agentctl forgets this proxy and its key. Nothing changes on the server.", b.W, b.H))
 	case addDialog:
 		m.drawAddForm(sc)
+	case askDialog:
+		m.panel(sc, "T3 Code", m.ask.heading, nil, cancel, &button{m.ask.button, "m:yes", true})
+		text(skin.Clip(m.ask.body, b.W, b.H))
+	case devicesDialog:
+		m.drawDevices(sc)
+	case pairFormDialog:
+		m.drawPairForm(sc)
+	case pairDialog:
+		m.drawPairing(sc)
 	}
 }
 
@@ -664,15 +690,22 @@ func (m Model) drawAddForm(sc *scene) {
 		sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), b.W), b.X, b.Y+i*4, 53, "")
 	}
 	for i, in := range m.inputs {
-		border := p.Line
-		if i == m.field {
-			border = p.Accent
-		}
-		box := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Width(b.W).Render(skin.Cell(in.View(), b.W-2))
-		sc.add(box, b.X, b.Y+i*4+1, 53, "m:input:"+strconv.Itoa(i))
+		sc.add(m.inputBox(in, i == m.field, b.W), b.X, b.Y+i*4+1, 53, "m:input:"+strconv.Itoa(i))
 	}
 	// The error row is always reserved, empty or not.
-	sc.add(skin.Cell(skin.Fg(p.Red).Render(errLine(m.formErr)), b.W), b.X, b.Y+12, 53, "m:error")
+	sc.add(skin.Cell(skin.Fg(p.Red).Render(errLine(m.formErr)), b.W), b.X, b.Y+formErrRow, 53, "m:error")
+}
+
+// formErrRow is the row every form reserves for its error, empty or not.
+const formErrRow = 12
+
+// inputBox is a text input in a hairline box, accented when focused.
+func (m Model) inputBox(in textinput.Model, focused bool, width int) string {
+	border := m.pal.Line
+	if focused {
+		border = m.pal.Accent
+	}
+	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Width(width).Render(skin.Cell(in.View(), width-2))
 }
 
 func errLine(s string) string {

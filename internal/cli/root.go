@@ -37,6 +37,7 @@ func newRootCmd() *cobra.Command {
   agentctl use codex spark
   agentctl use claude local
   agentctl tune claude
+  agentctl t3 pair
   agentctl status`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -47,7 +48,7 @@ func newRootCmd() *cobra.Command {
 			return printStatus(u)
 		},
 	}
-	root.AddCommand(newProxyCmd(), newUseCmd(), newRefreshCmd(), newTuneCmd(), newStatusCmd(), newTokenCmd())
+	root.AddCommand(newProxyCmd(), newUseCmd(), newRefreshCmd(), newTuneCmd(), newT3Cmd(), newStatusCmd(), newTokenCmd())
 	return root
 }
 

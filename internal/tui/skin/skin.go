@@ -178,7 +178,9 @@ func (p Palette) Wordmark() string {
 func (p Palette) Row(icon, label string, labelW int, detail string, width int, selected, hover bool) string {
 	label = Cell(label, labelW)
 	if detail != "" {
-		detail = "  " + Cell(detail, max(0, width-labelW-4))
+		// Marker or margin, icon and its space, label, two-space gap.
+		used := 1 + lipgloss.Width(icon) + 1 + labelW + 2
+		detail = "  " + Cell(detail, max(0, width-used))
 	}
 	switch {
 	case selected:

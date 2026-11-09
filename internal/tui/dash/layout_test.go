@@ -15,6 +15,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tune"
 )
 
@@ -207,6 +208,23 @@ func dialogStates(t *testing.T, m Model) []state {
 		td = send(t, td, keyPress("down"))
 	}
 	add("tune toggled", send(t, td, keyPress("space")))
+
+	for _, n := range []int{0, 3, 60} {
+		dev := send(t, m, t3AccessMsg{list: accessList(n)})
+		add(fmt.Sprintf("devices %d", n), dev)
+		if n > 0 {
+			add(fmt.Sprintf("devices %d revoke", n), send(t, dev, click("m:revoke")))
+		}
+		for range 40 {
+			dev = send(t, dev, keyPress("down"))
+		}
+		add(fmt.Sprintf("devices %d scrolled", n), dev)
+	}
+	pf := send(t, m, t3AccessMsg{list: accessList(3)}, click("m:pair"))
+	add("pair form", pf)
+	add("pair form error", send(t, pf, t3PairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
+	add("pairing", send(t, m, t3PairedMsg{pairing: t3.Pairing{URL: "https://box.tail035df.ts.net/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
+	add("pairing local", send(t, m, t3PairedMsg{pairing: t3.Pairing{URL: "http://127.0.0.1:3773/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
 	return out
 }
 
@@ -226,12 +244,13 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 				t.Errorf("%s: %q dialog %+v leaves the screen", sizeName(m), s.name, r)
 			}
 		}
-		sameRects(t, states, "m:panel", "m:close", "m:cancel", "hints", "status",
-			"m:input:0", "m:input:1", "m:input:2", "m:error")
-		// The primary and first extra slots hold different buttons per dialog.
+		sameRects(t, states, "m:panel", "m:close", "hints", "status",
+			"m:input:0", "m:input:1", "m:input:2", "m:error", "m:info", "m:url")
+		// Each slot holds different buttons per dialog.
 		for _, slot := range [][]string{
-			{"m:ack", "m:apply", "m:submit", "m:tune-review", "m:remove", "m:close-btn"},
-			{"m:back", "m:test", "m:tune-reset"},
+			{"m:ack", "m:apply", "m:submit", "m:tune-review", "m:remove", "m:close-btn", "m:yes", "m:pair", "m:submit-pair"},
+			{"m:cancel", "m:revoke-idle"},
+			{"m:back", "m:test", "m:tune-reset", "m:revoke", "m:copy"},
 		} {
 			var want *rect
 			for _, s := range states {
@@ -246,10 +265,13 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 				}
 			}
 		}
-		var lists, bodies []state
+		var lists, bodies, devices []state
 		for _, s := range states {
 			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") {
 				lists = append(lists, s)
+			}
+			if s.m.dialog == devicesDialog {
+				devices = append(devices, s)
 			}
 			if strings.HasPrefix(s.name, "proxy") {
 				bodies = append(bodies, s)
@@ -257,6 +279,7 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		}
 		sameRects(t, bodies, "m:body")
 		sameRects(t, lists, "m:opt:0")
+		sameRects(t, devices, "m:opt:0", "m:opt:1", "m:opt:2", "m:opt:59")
 	}
 }
 
@@ -309,7 +332,7 @@ func TestMultilineTextStaysOneRow(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = multi, true
 		down := send(t, m, probedMsg{name: "spark", probe: app.Probe{HealthErr: errors.New(multi)}})
-		down.focus = 3
+		down.focus = 4 // spark
 		form, _ := m.openAdd()
 		withErr := send(t, form.(Model), savedMsg{name: "x", err: errors.New(multi)})
 		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}})

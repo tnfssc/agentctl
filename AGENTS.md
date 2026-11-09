@@ -1,6 +1,7 @@
 # agentctl
 
-Go CLI that routes Claude Code and Codex to their own login or to CLIProxyAPI servers. Module
+Go CLI that routes Claude Code and Codex to their own login or to CLIProxyAPI servers, and runs T3 Code on the same
+machine. Module
 `github.com/tnfssc/agentctl`, binary `agentctl`. Decisions and research live in `.agents/notes/`; read the notes for a
 feature before changing it.
 
@@ -11,6 +12,10 @@ feature before changing it.
   go into agent configs; agents call `agentctl token <proxy>`.
 - Never write to a user's real `~/.claude` or `~/.codex` while developing; use `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
   `XDG_CONFIG_HOME` pointing into `.tmp/` (tests do this via `internal/testutil`).
+- T3 Code is managed only through the upstream `t3` CLI and the state it writes (`internal/t3`); agentctl never writes
+  T3's units, plists or `service.env`. Never run `t3` or agentctl's T3 commands against the real `~/.t3` while
+  developing: they install launchd/systemd services and migrate its database. Set `T3CODE_HOME` into `.tmp/` (tests
+  use `testutil.T3`, a fake `t3`).
 
 ## Tooling
 

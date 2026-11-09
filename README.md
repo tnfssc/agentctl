@@ -66,6 +66,23 @@ proxy models on its own at startup; Codex needs `agentctl refresh`.
 Routing Claude Code through a proxy asks for a one-time acknowledgement: Anthropic's terms forbid proxies that serve
 Claude subscription logins, and accounts on them can be banned.
 
+### T3 Code
+
+agentctl also runs [T3 Code](https://github.com/pingdotgg/t3code) on the same machine, on the nightly channel, as a
+background service (T3 Code under Agents in the dashboard):
+
+```sh
+agentctl t3 install                  # T3 Code's installer, then its background service
+agentctl t3                          # running?, version, newer nightly
+agentctl t3 update                   # newest nightly; restarts the service
+agentctl t3 url https://box.your-tailnet.ts.net   # the address other devices use, once
+agentctl t3 pair --label phone       # one-time link and QR code for a new device
+agentctl t3 devices                  # paired devices and open links, last seen
+agentctl t3 revoke --idle            # sign out paired devices last connected over 7 days ago
+```
+
+Everything goes through T3 Code's own `t3` CLI, so updates started from a T3 Code desktop app reach the server too.
+
 ## Develop
 
 Tools are pinned in `mise.toml`.

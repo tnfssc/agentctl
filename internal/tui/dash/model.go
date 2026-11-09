@@ -16,6 +16,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
@@ -23,6 +24,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
 	"github.com/tnfssc/agentctl/internal/tune"
@@ -32,15 +34,19 @@ import (
 type dialog int
 
 const (
-	noDialog      dialog = iota
-	routeDialog          // pick local or a proxy for one agent
-	modelDialog          // pick a model on that proxy
-	ackDialog            // Claude-through-proxy policy warning
-	confirmDialog        // diff of a planned change
-	addDialog            // new proxy form
-	proxyDialog          // one proxy's check result and models
-	removeDialog         // confirm removing a proxy
-	tuneDialog           // curated settings for one agent
+	noDialog       dialog = iota
+	routeDialog           // pick local or a proxy for one agent
+	modelDialog           // pick a model on that proxy
+	ackDialog             // Claude-through-proxy policy warning
+	confirmDialog         // diff of a planned change
+	addDialog             // new proxy form
+	proxyDialog           // one proxy's check result and models
+	removeDialog          // confirm removing a proxy
+	tuneDialog            // curated settings for one agent
+	askDialog             // yes/no before a T3 Code step
+	devicesDialog         // T3 Code's sessions and pairing links
+	pairFormDialog        // name and address for a new pairing link
+	pairDialog            // the new pairing link and its QR code
 )
 
 // option is one row of a pick list.
@@ -110,8 +116,18 @@ type Model struct {
 	tuneItems []tune.Status
 	tuneWant  map[string]bool
 
+	t3         t3.Status
+	t3Err      error
+	t3Loaded   bool
+	t3Starting bool        // after an install, update or restart, until it answers
+	noColor    bool        // the terminal shows no color
+	access     []t3.Access // devicesDialog's entries
+	ask        askSpec
+	pairing    t3.Pairing
+	qr         []string
+
 	inputs  []textinput.Model
-	field   int    // focused input in addDialog
+	field   int    // focused input in addDialog and pairFormDialog
 	formErr string // last failed check, shown in the form
 
 	toast    string
@@ -137,7 +153,7 @@ func (m *Model) setPalette(isDark bool) {
 
 // Init loads config and asks for the background color.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, load)
+	return tea.Batch(tea.RequestBackgroundColor, load, inspectT3(m.ctx))
 }
 
 // needsFrames reports whether anything on screen is animating.
@@ -185,6 +201,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.BackgroundColorMsg:
 		m.setPalette(msg.IsDark())
+		return m, nil
+	case tea.ColorProfileMsg:
+		m.noColor = msg.Profile < colorprofile.ANSI
 		return m, nil
 	case frameMsg:
 		m.frame++
@@ -242,6 +261,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.close(msg.err.Error(), true), load
 		}
 		return m.close("Removed "+msg.name, false), load
+	case t3LoadedMsg, t3AccessMsg, t3DoneMsg, t3PairedMsg:
+		return m.onT3(msg)
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -251,7 +272,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.onKey(msg)
 	}
-	if m.dialog == addDialog {
+	if m.dialog == addDialog || m.dialog == pairFormDialog {
 		return m.updateInputs(msg)
 	}
 	return m, nil
@@ -289,7 +310,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
-	ids = append(ids, "behavior")
+	ids = append(ids, "t3", "behavior")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -303,7 +324,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pointerWheel:
 		switch m.dialog {
-		case routeDialog, modelDialog, tuneDialog:
+		case routeDialog, modelDialog, tuneDialog, devicesDialog:
 			m.movePick(p.wheel)
 		case confirmDialog, proxyDialog:
 			if p.wheel < 0 {
@@ -351,6 +372,16 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
 	case "behavior":
 		return m.act("tune:" + tune.Instructions)
+	case "t3":
+		// Opening the row presses its primary button.
+		for _, b := range m.t3Detail(m.pal).buttons {
+			if b.primary {
+				return m.act(b.id)
+			}
+		}
+		return m, nil
+	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices":
+		return m.actT3(verb)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
 	case "proxy", "details":
@@ -379,8 +410,28 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
-	case "close", "close-btn", "cancel":
+	case "close-btn":
+		if m.dialog == pairDialog { // back to the list, which now shows the link
+			m.busy = "Loading devices"
+			return m, listAccess(m.ctx)
+		}
 		return m.close("", false), nil
+	case "close", "cancel":
+		if (m.dialog == askDialog && m.ask.reopen) || m.dialog == pairFormDialog {
+			m.dialog = devicesDialog
+			return m, nil
+		}
+		return m.close("", false), nil
+	case "yes":
+		m.busy = m.ask.busy
+		return m, m.ask.run
+	case "revoke", "revoke-idle", "pair":
+		return m.actDevices(verb)
+	case "submit-pair":
+		return m.submitPair()
+	case "copy":
+		m.toast, m.toastErr = "Copied the link", false
+		return m, tea.SetClipboard(m.pairing.URL)
 	case "back":
 		return m.openRoutes(m.statusOf(m.req.Agent))
 	case "opt":
@@ -389,8 +440,11 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pick = i
-		if m.dialog == tuneDialog {
+		switch m.dialog {
+		case tuneDialog:
 			m.toggleTune()
+			return m, nil
+		case devicesDialog:
 			return m, nil
 		}
 		return m.choose()
@@ -510,10 +564,46 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
-	case addDialog:
+	case askDialog:
+		switch k {
+		case "y", "enter":
+			return m.actDialog("yes")
+		case "n", "esc":
+			return m.actDialog("cancel")
+		}
+		return m, nil
+	case devicesDialog:
+		switch k {
+		case "up", "k":
+			m.movePick(-1)
+		case "down", "j":
+			m.movePick(1)
+		case "r", "d":
+			return m.actDialog("revoke")
+		case "i":
+			return m.actDialog("revoke-idle")
+		case "p", "enter":
+			return m.actDialog("pair")
+		case "esc", "q":
+			return m.close("", false), nil
+		}
+		return m, nil
+	case pairDialog:
+		switch k {
+		case "c":
+			return m.actDialog("copy")
+		case "enter", "esc", "q":
+			return m.actDialog("close-btn")
+		}
+		return m, nil
+	case addDialog, pairFormDialog:
+		submit := m.submit
+		if m.dialog == pairFormDialog {
+			submit = m.submitPair
+		}
 		switch k {
 		case "esc":
-			return m.close("", false), nil
+			return m.actDialog("cancel")
 		case "tab", "down":
 			return m, m.focusInput((m.field + 1) % len(m.inputs))
 		case "shift+tab", "up":
@@ -522,7 +612,7 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.field < len(m.inputs)-1 {
 				return m, m.focusInput(m.field + 1)
 			}
-			return m.submit()
+			return submit()
 		}
 		return m.updateInputs(msg)
 	}
