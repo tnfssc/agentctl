@@ -161,7 +161,7 @@ func TestMouseHitsElements(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"nav:agent:claude", "nav:agent:codex", "nav:proxy:spark", "nav:add", "switch:claude", "add", "refresh", "testall", "quit"} {
+	for _, id := range []string{"nav:agent:claude", "nav:agent:codex", "nav:proxy:spark", "nav:add", "switch:claude"} {
 		if !found[id] {
 			t.Errorf("no screen cell resolves to %q", id)
 		}

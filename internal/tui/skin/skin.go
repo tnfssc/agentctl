@@ -140,15 +140,6 @@ func (p Palette) Button(label string, width int, primary, hover bool) string {
 	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border).Render(Fg(fg).Render(text))
 }
 
-// Pill is the bordered status badge, a colored square then dim and bright
-// text ("■ prod server / running"), always width cells wide.
-func (p Palette) Pill(dot color.Color, dim, bright string, width int) string {
-	const brightW = 9
-	dimW := max(1, width-2-2-3-brightW) // border, "■ ", " / "
-	s := Fg(dot).Render("■") + " " + Fg(p.Muted).Render(Cell(dim, dimW)) + Fg(p.Dim).Render(" / ") + Fg(p.Text).Render(Cell(bright, brightW))
-	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Line).Render(Cell(s, width-2))
-}
-
 // Cell renders styled text as exactly one row of exactly width cells: line
 // breaks become spaces, then the text is truncated or padded.
 func Cell(s string, width int) string {
@@ -237,27 +228,43 @@ func (p Palette) Row(icon, label string, labelW int, detail string, width int, s
 // the label on the second. Two lines make a target a finger can hit on a
 // phone. Selected items sit on a raised fill with an accent marker.
 func (p Palette) Tall(icon, label, detail, mark string, width int, selected, hover bool) string {
-	markW := lipgloss.Width(mark)
-	textW := max(0, width-3-lipgloss.Width(icon)-markW-1)
-	top := icon + " " + Cell(label, textW)
-	bottom := strings.Repeat(" ", lipgloss.Width(icon)+1) + Cell(detail, textW)
+	return p.TallDot(icon, nil, label, detail, mark, width, selected, hover)
+}
+
+// TallDot is Tall with the icon in its own color, e.g. a status dot. The
+// icon must be plain text: Lip Gloss resets styles after every span, so a
+// pre-colored icon would drop the fill and the label's style after it.
+func (p Palette) TallDot(icon string, dot color.Color, label, detail, mark string, width int, selected, hover bool) string {
+	iconW, markW := lipgloss.Width(icon), lipgloss.Width(mark)
+	textW := max(0, width-3-iconW-markW-1)
+	top := " " + Cell(label, textW)
+	bottom := strings.Repeat(" ", iconW+1) + Cell(detail, textW)
 	if mark != "" {
 		top += " " + mark
 		bottom += " " + strings.Repeat(" ", markW)
 	}
+	text, sub := p.Muted, p.Dim
 	switch {
 	case selected:
-		on, dim := On(p.Text, p.Raised), On(p.Muted, p.Raised)
-		bar := On(p.Accent, p.Raised).Render("▎")
-		line := func(s string, st lipgloss.Style) string {
-			return bar + st.Render(s) + On(p.Text, p.Raised).Render(strings.Repeat(" ", max(0, width-1-lipgloss.Width(s))))
-		}
-		return line(top, on.Bold(true)) + "\n" + line(bottom, dim)
+		text, sub = p.Text, p.Muted
 	case hover:
-		return Cell(" "+Fg(p.Text).Render(top), width) + "\n" + Cell(" "+Fg(p.Muted).Render(bottom), width)
-	default:
-		return Cell(" "+Fg(p.Muted).Render(top), width) + "\n" + Cell(" "+Fg(p.Dim).Render(bottom), width)
+		text, sub = p.Text, p.Muted
 	}
+	iconC := text
+	if dot != nil {
+		iconC = dot
+	}
+	if !selected {
+		return Cell(" "+Fg(iconC).Render(icon)+Fg(text).Render(top), width) + "\n" + Cell(" "+Fg(sub).Render(bottom), width)
+	}
+	bar := On(p.Accent, p.Raised).Render("▎")
+	fill := func(used int) string {
+		return On(p.Text, p.Raised).Render(strings.Repeat(" ", max(0, width-1-used)))
+	}
+	first := bar + On(iconC, p.Raised).Bold(true).Render(icon) + On(text, p.Raised).Bold(true).Render(top) +
+		fill(iconW+lipgloss.Width(top))
+	second := bar + On(sub, p.Raised).Render(bottom) + fill(lipgloss.Width(bottom))
+	return first + "\n" + second
 }
 
 func pad(s string, width int) string {

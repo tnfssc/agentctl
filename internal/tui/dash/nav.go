@@ -2,13 +2,14 @@ package dash
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 )
 
-// The home list: agents, behavior and proxies as two-line items under
+// The home list: agents, servers, behavior and proxies as two-line items under
 // section labels. It is the sidebar in the wide layout and the whole home
 // page in the compact one. It scrolls inside a window whose size comes from
 // the terminal alone, with one row kept for "more" hints and "Add a proxy"
@@ -17,6 +18,7 @@ import (
 // navEntry is one item in the home list.
 type navEntry struct {
 	id, section, icon, label, detail string
+	dot                              color.Color // the icon's color, nil for the default
 }
 
 // navEntries lists the home items in keyboard order (see homeIDs).
@@ -30,21 +32,40 @@ func (m Model) navEntries(p skin.Palette) []navEntry {
 		if as.status.Model != "" {
 			detail += " · " + as.status.Model
 		}
-		out = append(out, navEntry{"agent:" + as.agent.Name, "Agents", "◆", as.agent.Title, detail})
+		out = append(out, navEntry{id: "agent:" + as.agent.Name, section: "Agents", icon: "◆", label: as.agent.Title, detail: detail})
 	}
 	out = append(out,
-		navEntry{"t3", "Agents", "◆", "T3 Code", m.t3State()},
-		navEntry{"behavior", "Behavior", "◇", "Instructions", "all agents"},
-		navEntry{"git", "Behavior", "◇", "Git", m.signingState()},
+		serverEntry(p, "t3", "T3 Code", m.t3State(), m.t3State()),
+		serverEntry(p, "opencode", "OpenCode web", m.ocState(), m.ocNavDetail()),
+		navEntry{id: "behavior", section: "Behavior", icon: "◇", label: "Instructions", detail: "all agents"},
+		navEntry{id: "git", section: "Behavior", icon: "◇", label: "Git", detail: m.signingState()},
 	)
 	for _, n := range m.cfg.Names() {
-		out = append(out, navEntry{"proxy:" + n, "Proxies", m.proxyDot(p, n), n, m.proxyState(n)})
+		out = append(out, navEntry{id: "proxy:" + n, section: "Proxies", icon: "●", label: n, detail: m.proxyState(n), dot: m.proxyDot(p, n)})
 	}
 	return out
 }
 
+// serverEntry shows a server's state at a glance, like a proxy's: green
+// when it runs, amber when it runs but wants something or is busy, red on
+// error, hollow when it isn't running.
+func serverEntry(p skin.Palette, id, label, state, detail string) navEntry {
+	e := navEntry{id: id, section: "Servers", icon: "●", label: label, detail: detail}
+	switch state {
+	case "running":
+		e.dot = p.Green
+	case "update", "restart", "checking", "starting":
+		e.dot = p.Amber
+	case "error":
+		e.dot = p.Red
+	default:
+		e.icon, e.dot = "○", p.Dim
+	}
+	return e
+}
+
 // addEntry is the pinned last item; homeIDs lists it last.
-var addEntry = navEntry{"add", "Proxies", "+", "Add a proxy", "a URL and a key"}
+var addEntry = navEntry{id: "add", section: "Proxies", icon: "+", label: "Add a proxy", detail: "a URL and a key"}
 
 // proxyState is a proxy's one-line health for the home list.
 func (m Model) proxyState(name string) string {
@@ -170,7 +191,7 @@ func (m Model) drawNav(sc *scene, p skin.Palette) {
 			sc.add(p.Label(l.header), a.X+1, a.Y+r, 1, "")
 		case l.entry >= 0 && l.part == 0 && r+1 < h:
 			e := entries[l.entry]
-			sc.add(p.Tall(e.icon, e.label, e.detail, mark, a.W, e.id == selected, m.hover == "nav:"+e.id), a.X, a.Y+r, 2, "nav:"+e.id)
+			sc.add(p.TallDot(e.icon, e.dot, e.label, e.detail, mark, a.W, e.id == selected, m.hover == "nav:"+e.id), a.X, a.Y+r, 2, "nav:"+e.id)
 		}
 	}
 	// Items that don't fit whole, including one cut by the window's edge.
@@ -189,5 +210,5 @@ func (m Model) drawNav(sc *scene, p skin.Palette) {
 	}
 	sc.add(skin.Cell(skin.Fg(p.Dim).Render(" "+strings.Join(more, " ")), a.W), a.X, a.Y+h, 1, "more")
 	e := addEntry
-	sc.add(p.Tall(e.icon, e.label, e.detail, mark, a.W, e.id == selected, m.hover == "nav:"+e.id), a.X, a.Y+h+1, 2, "nav:"+e.id)
+	sc.add(p.TallDot(e.icon, e.dot, e.label, e.detail, mark, a.W, e.id == selected, m.hover == "nav:"+e.id), a.X, a.Y+h+1, 2, "nav:"+e.id)
 }

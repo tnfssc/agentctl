@@ -9,7 +9,7 @@ classes, all from content-sized layout.
 - Everything sits on a grid computed from terminal size only (`internal/tui/dash/view.go` constants): fixed dialog
   shell (size/position per terminal size), button slots (extras from left, Cancel and primary on the right), fixed
   list windows with a reserved "↓ N more" row, fixed description/warning/error rows, fixed fact rows, fixed-width
-  buttons/pill/columns (`skin.Button`, `skin.Pill`, `skin.Row` labelW, `skin.Cell`, `skin.Clip`).
+  buttons/columns (`skin.Button`, `skin.Row` labelW, `skin.Cell`, `skin.Clip`).
 - Overflow truncates or scrolls inside its own area; it never pushes neighbors. Empty slots stay empty.
 - `layout_test.go` compares rects of identified layers across many states and sizes (80x24..200x60); mutation-checked
   to catch reintroduced shifts. Give new elements layer IDs so the tests cover them.

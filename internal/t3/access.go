@@ -213,8 +213,9 @@ func Ago(now, t time.Time) string {
 	return fmt.Sprintf("%s%dd%s", prefix, int(d.Hours()/24), suffix)
 }
 
-// NormalizeURL checks a base URL for pairing links. T3 replaces any path
-// with /pair, so one is refused rather than silently dropped.
+// NormalizeURL checks a base URL for pairing links. T3 Code and OpenCode
+// both replace any path with their own, so one is refused rather than
+// silently dropped.
 func NormalizeURL(raw string) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
@@ -222,7 +223,7 @@ func NormalizeURL(raw string) (string, error) {
 		return "", fmt.Errorf("%q is not an http(s) URL", raw)
 	}
 	if u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("%q has a path; T3 Code serves pairing links at the root of an address", raw)
+		return "", fmt.Errorf("%q has a path; pairing links go at the root of an address", raw)
 	}
 	return raw, nil
 }

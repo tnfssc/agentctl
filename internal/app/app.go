@@ -15,6 +15,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/pi"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/models"
+	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/proxy"
 )
 
@@ -184,6 +185,22 @@ func Apply(plan agent.Plan, st *config.State) error {
 	}
 	return st.Save()
 }
+
+// ConnectOpenCodeClaude turns on OpenCode's claude-agent provider for an
+// OpenCode route, applied or already in place: it is how OpenCode reaches
+// Claude models, through Claude Code, and it lists none until connected. It
+// reports whether it connected it just now.
+func ConnectOpenCodeClaude(ctx context.Context, plan agent.Plan) (bool, error) {
+	if plan.Agent != opencode.Name || plan.Route == "" {
+		return false, nil
+	}
+	return ocweb.ConnectClaude(ctx)
+}
+
+// ClaudeConnected is what to tell the user after ConnectOpenCodeClaude
+// connected claude-agent.
+const ClaudeConnected = "Turned on OpenCode's claude-agent: Claude models come through Claude Code and show up in " +
+	"OpenCode in a minute."
 
 // ErrNothingToRefresh means no agent with a model list is routed through a
 // proxy.

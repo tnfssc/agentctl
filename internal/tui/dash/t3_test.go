@@ -76,7 +76,7 @@ func TestT3HomeHasNoLayoutShift(t *testing.T) {
 			states = append(states, state{name + " unfocused", other})
 		}
 		sameRects(t, states, "nav:agent:claude", "nav:agent:codex", "nav:t3", "nav:behavior", "nav:proxy:spark", "nav:add",
-			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "status", "hints", "pill")
+			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "status", "hints")
 		for _, slot := range [][]string{{"t3-devices", "t3-install"}, {"t3-update", "t3-setup", "t3-restart"}, {"t3-service"}} {
 			var want *rect
 			for _, s := range states {
@@ -164,7 +164,7 @@ func TestPairingShowsQRWhenItFits(t *testing.T) {
 		w, h int
 		qr   bool
 	}{{120, 40, true}, {120, 30, true}, {120, 29, false}, {80, 24, false}} {
-		m := send(t, base(t, c.w, c.h), t3PairedMsg{pairing: link})
+		m := send(t, base(t, c.w, c.h), pairedMsg{pairing: link})
 		view := ansi.Strip(m.View().Content)
 		if !strings.Contains(view, link.URL) {
 			t.Fatalf("%dx%d: link not shown", c.w, c.h)
@@ -205,7 +205,7 @@ func TestRestartWaitsForTheServer(t *testing.T) {
 func TestNoQRWithoutColor(t *testing.T) {
 	m := base(t, 120, 40)
 	m.noColor = true
-	m = send(t, m, t3PairedMsg{pairing: t3.Pairing{URL: "https://box.ts.net/pair#token=TOKEN12CHARS", Expires: time.Now().Add(time.Minute)}})
+	m = send(t, m, pairedMsg{pairing: t3.Pairing{URL: "https://box.ts.net/pair#token=TOKEN12CHARS", Expires: time.Now().Add(time.Minute)}})
 	view := ansi.Strip(m.View().Content)
 	if strings.Contains(view, "█") || !strings.Contains(view, "no color") {
 		t.Fatal("without color the dialog should explain the missing QR code, not draw an inverted one")

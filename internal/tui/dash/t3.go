@@ -16,8 +16,18 @@ import (
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 )
 
-// T3 Code on this machine: a row under Agents, a detail pane with the
+// T3 Code on this machine: a row under Servers, a detail pane with the
 // server's state, a devices dialog, a pairing form and the pairing link.
+
+const svcT3 = "t3"
+
+// svcTitle names the app the shared ask, server and pairing dialogs act on.
+func (m Model) svcTitle() string {
+	if m.svc == svcOpenCode {
+		return "OpenCode web"
+	}
+	return "T3 Code"
+}
 
 type (
 	t3LoadedMsg struct {
@@ -34,7 +44,7 @@ type (
 		err  error
 		wait bool // the server restarts; wait for it to answer
 	}
-	t3PairedMsg struct {
+	pairedMsg struct {
 		pairing t3.Pairing
 		err     error
 	}
@@ -42,10 +52,10 @@ type (
 
 // askSpec is a yes/no question in askDialog and what yes runs.
 type askSpec struct {
-	heading, body, button string
-	run                   tea.Cmd
-	busy                  string
-	reopen                bool // return to the devices dialog afterwards
+	title, heading, body, button string
+	run                          tea.Cmd
+	busy                         string
+	reopen                       bool // return to the devices dialog afterwards
 }
 
 func inspectT3(ctx context.Context) tea.Cmd {
@@ -112,7 +122,7 @@ func pair(ctx context.Context, label, base, origin string) tea.Cmd {
 	return func() tea.Msg {
 		cfg, err := config.Load()
 		if err != nil {
-			return t3PairedMsg{err: err}
+			return pairedMsg{err: err}
 		}
 		want := base
 		if base == origin {
@@ -121,11 +131,11 @@ func pair(ctx context.Context, label, base, origin string) tea.Cmd {
 		if cfg.T3.URL != want {
 			cfg.T3.URL = want
 			if err := cfg.Save(); err != nil {
-				return t3PairedMsg{err: err}
+				return pairedMsg{err: err}
 			}
 		}
 		p, err := t3.Pair(ctx, label, base, t3.DefaultTTL)
-		return t3PairedMsg{pairing: p, err: err}
+		return pairedMsg{pairing: p, err: err}
 	}
 }
 
@@ -141,7 +151,7 @@ func (m Model) onT3(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.err != nil {
 			return m.close(msg.err.Error(), true), nil
 		}
-		m.access = msg.list
+		m.access, m.svc = msg.list, svcT3
 		m.options = make([]option, len(msg.list))
 		m.pick, m.top = min(m.pick, max(0, len(msg.list)-1)), 0
 		m.dialog = devicesDialog
@@ -161,7 +171,7 @@ func (m Model) onT3(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.t3Starting = true
 		return m.close(msg.what, false), waitT3(m.ctx)
-	case t3PairedMsg:
+	case pairedMsg:
 		m.busy = ""
 		if msg.err != nil {
 			m.formErr = msg.err.Error()
@@ -202,7 +212,7 @@ func (m Model) t3LinkBase() string { return t3.LinkBase(m.cfg.T3.URL, m.t3) }
 
 func (m Model) t3Detail(p skin.Palette) detailView {
 	st := m.t3
-	d := detailView{label: "App · T3 Code"}
+	d := detailView{label: "Server · T3 Code"}
 	install := button{"Install", "t3-install", true}
 	switch {
 	case !m.t3Loaded:
@@ -283,6 +293,7 @@ var serviceOptions = []option{
 
 // actT3 handles the T3 Code buttons on the home screen.
 func (m Model) actT3(verb string) (tea.Model, tea.Cmd) {
+	m.svc = svcT3
 	switch verb {
 	case "t3-install", "t3-repair", "t3-setup":
 		body := "Downloads T3 Code's installer from t3.codes for the nightly channel, then installs a background " +
@@ -326,6 +337,7 @@ func (m Model) actT3(verb string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) askT3(a askSpec) Model {
+	a.title = "T3 Code"
 	m.ask, m.dialog = a, askDialog
 	return m
 }
@@ -404,6 +416,9 @@ func (m Model) openPairForm() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) submitPair() (tea.Model, tea.Cmd) {
+	if m.svc == svcOpenCode {
+		return m.submitOCPair()
+	}
 	base, err := t3.NormalizeURL(m.inputs[1].Value())
 	if err != nil {
 		m.formErr = err.Error()
@@ -472,22 +487,38 @@ func (m Model) drawDevices(sc *scene) {
 }
 
 func (m Model) drawPairForm(sc *scene) {
-	m.panel(sc, "T3 Code · pair a device", "Make a one-time pairing link", nil,
+	m.panel(sc, m.svcTitle()+" · pair a device", "Make a one-time pairing link", nil,
 		&button{"Cancel", "m:cancel", false}, &button{"Make link", "m:submit-pair", true})
-	m.drawFields(sc, []string{"Device", "Address"}, []string{"shown in the devices list", "how the new device reaches this machine"})
+	labels, hints := []string{"Device", "Address"}, []string{"shown in the devices list", "how the new device reaches this machine"}
+	if m.svc == svcOpenCode { // OpenCode doesn't name devices
+		labels, hints = labels[1:], hints[1:]
+	}
+	m.drawFields(sc, labels, hints)
 }
 
 func (m Model) drawPairing(sc *scene) {
 	p := m.pal
 	b := m.dialogBody()
-	m.panel(sc, "T3 Code · pair a device", "Open this link on the new device",
+	m.panel(sc, m.svcTitle()+" · pair a device", "Open this link on the new device",
 		[]button{{"Copy link", "m:copy", false}}, nil, &button{"Done", "m:close-btn", true})
-	sc.add(skin.Cell(skin.Fg(p.Text).Render(m.pairing.URL), b.W), b.X, b.Y, 53, "m:url")
-	note := "One device · expires " + t3.Ago(time.Now(), m.pairing.Expires) + " · copied to the clipboard"
+	// The link is a terminal hyperlink, wrapped rather than cut, and the
+	// dialog leaves the mouse to the terminal (see View), so it can be
+	// selected, clicked or copied from the terminal's own menu.
+	link := skin.Fg(p.Text).Hyperlink(m.pairing.URL)
+	rows := m.linkRows()
+	for i, row := range rows {
+		id := ""
+		if i == 0 {
+			id = "m:url"
+		}
+		sc.add(skin.Cell(link.Render(row), b.W), b.X, b.Y+i, 53, id)
+	}
+	note := "One device · expires " + t3.Ago(time.Now(), m.pairing.Expires) + " · select it, or c to copy"
 	if t3.LocalOnly(m.pairing.URL) {
 		note = "Only works on this machine: set the server address other devices use"
 	}
-	sc.add(skin.Cell(skin.Fg(p.Muted).Render(note), b.W), b.X, b.Y+1, 53, "")
+	qrTop := m.qrTop()
+	sc.add(skin.Cell(skin.Fg(p.Muted).Render(note), b.W), b.X, b.Y+len(rows), 53, "")
 	if len(m.qr) == 0 {
 		return
 	}
@@ -510,5 +541,28 @@ func (m Model) drawPairing(sc *scene) {
 	}
 }
 
+// maxLinkRows caps the rows a pairing link wraps over; a longer one is cut.
+const maxLinkRows = 3
+
+// linkRows is the pairing link cut into rows of the dialog's width.
+func (m Model) linkRows() []string {
+	w := max(1, m.dialogBody().W)
+	r := []rune(m.pairing.URL)
+	var rows []string
+	for len(r) > 0 && len(rows) < maxLinkRows {
+		n := min(w, len(r))
+		rows = append(rows, string(r[:n]))
+		r = r[n:]
+	}
+	if len(r) > 0 {
+		last := []rune(rows[len(rows)-1])
+		rows[len(rows)-1] = string(last[:len(last)-1]) + "…"
+	}
+	if len(rows) == 0 {
+		rows = []string{""}
+	}
+	return rows
+}
+
 // qrTop is the pairing body's first QR row, under the link and its note.
-const qrTop = 2
+func (m Model) qrTop() int { return len(m.linkRows()) + 1 }

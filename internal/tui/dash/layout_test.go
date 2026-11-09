@@ -9,7 +9,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/app"
@@ -114,7 +113,7 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		states = append(states, state{"busy", busy}, state{"toast", toast})
 
 		// The frame never moves, whatever is selected.
-		sameRects(t, states, "pill", "status", "hints", "more", "nav:add", "add", "testall", "refresh", "quit",
+		sameRects(t, states, "status", "hints", "more", "nav:add",
 			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "back")
 		// Items move only when a new selection scrolls the list.
 		for _, group := range byFocus {
@@ -123,7 +122,7 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
 			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions"},
-			{"local:codex", "details:spark"},
+			{"local:codex", "refresh"},
 			{"tune:claude", "tune:codex", "rm:spark"},
 		} {
 			var placed []state
@@ -239,9 +238,18 @@ func dialogStates(t *testing.T, m Model) []state {
 	add("service", send(t, svc, click("t3-service")))
 	pf := send(t, m, t3AccessMsg{list: accessList(3)}, click("m:pair"))
 	add("pair form", pf)
-	add("pair form error", send(t, pf, t3PairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
-	add("pairing", send(t, m, t3PairedMsg{pairing: t3.Pairing{URL: "https://box.tail035df.ts.net/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
-	add("pairing local", send(t, m, t3PairedMsg{pairing: t3.Pairing{URL: "http://127.0.0.1:3773/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
+	add("pair form error", send(t, pf, pairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
+	add("pairing", send(t, m, pairedMsg{pairing: t3.Pairing{URL: "https://box.tail035df.ts.net/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
+	add("pairing local", send(t, m, pairedMsg{pairing: t3.Pairing{URL: "http://127.0.0.1:3773/pair#token=TOKEN12CHARS", Expires: time.Now().Add(5 * time.Minute)}}))
+	oc := m
+	oc.oc, oc.ocLoaded = ocStates()["running"].st, true
+	oc = focusOn(oc, "opencode")
+	add("service opencode", send(t, oc, click("oc-server")))
+	add("ask opencode", send(t, oc, click("oc-server"), click("m:opt:2")))
+	ocForm := send(t, oc, click("oc-pair"))
+	add("pair form opencode", ocForm)
+	add("pair form opencode error", send(t, ocForm, pairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
+	add("pairing opencode", send(t, ocForm, pairedMsg{pairing: t3.Pairing{URL: "https://box.tail035df.ts.net/auth/connect/I0wuzPtW0raVKaWaAoHj_A", Expires: time.Now().Add(5 * time.Minute)}}))
 	return out
 }
 
@@ -284,7 +292,7 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		}
 		var lists, bodies, devices []state
 		for _, s := range states {
-			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") || s.name == "service" {
+			if strings.HasPrefix(s.name, "route") || strings.HasPrefix(s.name, "model") || strings.HasPrefix(s.name, "service") {
 				lists = append(lists, s)
 			}
 			if s.m.dialog == devicesDialog {
@@ -374,28 +382,6 @@ func TestMultilineTextStaysOneRow(t *testing.T) {
 		report := send(t, m, probedMsg{name: "spark", probe: app.Probe{Models: []proxy.Model{{ID: multi}, {ID: "next"}}}}, click("details:spark"))
 		if lines := strings.Split(report.proxyReport("spark"), "\n"); len(lines) != 9 {
 			t.Errorf("%s: report has %d rows, want 7 header rows + 2 models", sizeName(m), len(lines))
-		}
-	}
-}
-
-func TestPillTextDoesNotMove(t *testing.T) {
-	m := base(t, 120, 40)
-	two := loaded()
-	two.cfg.Proxies["zeta"] = config.Proxy{URL: "http://z"}
-	m2 := send(t, m, two)
-	var at []int
-	for _, s := range []Model{
-		New(context.Background(), Options{}), m,
-		send(t, m, probedMsg{name: "spark", probe: live(false)}),
-		send(t, m2, probedMsg{name: "spark", probe: live(false)}, probedMsg{name: "zeta", probe: app.Probe{HealthErr: errors.New("x")}}),
-	} {
-		s.width, s.height = 120, 40
-		pill := ansi.Strip(s.pill(s.pal))
-		at = append(at, strings.Index(strings.Split(pill, "\n")[1], " / "))
-	}
-	for _, x := range at[1:] {
-		if x != at[0] {
-			t.Fatalf("pill separator moves: %v", at)
 		}
 	}
 }

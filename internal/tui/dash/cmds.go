@@ -38,8 +38,16 @@ type (
 		refresh bool
 	}
 	appliedMsg struct {
-		plan agent.Plan
-		err  error
+		plan      agent.Plan
+		err       error
+		claude    string // what turning on OpenCode's claude-agent did, if anything
+		claudeErr bool
+	}
+	// claudeMsg reports turning on OpenCode's claude-agent for a route that
+	// was already in place.
+	claudeMsg struct {
+		toast string
+		err   bool
 	}
 	tuneLoadedMsg struct {
 		agent string
@@ -120,8 +128,36 @@ func planTune(agentName string, want map[string]bool) tea.Cmd {
 	}
 }
 
-func apply(p agent.Plan, st *config.State) tea.Cmd {
-	return func() tea.Msg { return appliedMsg{plan: p, err: app.Apply(p, st)} }
+func apply(ctx context.Context, p agent.Plan, st *config.State) tea.Cmd {
+	return func() tea.Msg {
+		if err := app.Apply(p, st); err != nil {
+			return appliedMsg{plan: p, err: err}
+		}
+		msg, failed := connectClaude(ctx, p)
+		return appliedMsg{plan: p, claude: msg, claudeErr: failed}
+	}
+}
+
+// connectClaude turns on OpenCode's claude-agent for an OpenCode route and
+// says what happened: "" when nothing needed doing.
+func connectClaude(ctx context.Context, p agent.Plan) (msg string, failed bool) {
+	switch on, err := app.ConnectOpenCodeClaude(ctx, p); {
+	case err != nil:
+		return "Couldn't turn on OpenCode's claude-agent, so it lists no Claude models: " + err.Error(), true
+	case on:
+		return app.ClaudeConnected, false
+	}
+	return "", false
+}
+
+func connectClaudeCmd(ctx context.Context, p agent.Plan, done string) tea.Cmd {
+	return func() tea.Msg {
+		msg, failed := connectClaude(ctx, p)
+		if msg == "" {
+			msg = done
+		}
+		return claudeMsg{toast: msg, err: failed}
+	}
 }
 
 // saveProxy checks a new proxy and saves it only if it works.

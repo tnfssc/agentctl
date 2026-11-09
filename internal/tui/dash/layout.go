@@ -50,35 +50,13 @@ func (m Model) content() rect {
 	return rect{0, top, m.width, m.height - 2 - top}
 }
 
-// compactLinks are the nav links, shortened for a narrow header.
-var compactLinks = []struct{ label, id string }{
-	{"Test proxies", "testall"}, {"Refresh", "refresh"}, {"Quit", "quit"},
-}
-
 func (m Model) drawCompactHeader(sc *scene, p skin.Palette) {
-	link := func(label, id string, x, y int) {
-		style := skin.Fg(p.Muted)
-		if m.hover == id {
-			style = skin.Fg(p.Text).Underline(true)
-		}
-		sc.add(style.Render(label), x, y, 1, id)
-	}
 	if m.shortHeader() {
 		sc.add(p.Wordmark(), 1, 0, 1, "")
-		x := m.width - 1
-		for i := len(compactLinks) - 1; i >= 0; i-- {
-			x -= len(compactLinks[i].label)
-			link(compactLinks[i].label, compactLinks[i].id, x, 0)
-			x -= 3
-		}
 		sc.add(p.HLine(m.width), 0, 1, 1, "")
 		return
 	}
 	sc.add(p.Logo(), 1, navTop, 1, "")
-	x := m.width - 1 - len(compactLinks[0].label)
-	for i, l := range compactLinks {
-		link(l.label, l.id, x, navTop+i)
-	}
 	sc.add(p.HLine(m.width), 0, pageTop-1, 1, "")
 }
 

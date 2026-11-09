@@ -64,7 +64,7 @@ func newTuneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := confirmAndApply(u, plan, st, yes, dryRun); err != nil {
+			if err := confirmAndApply(cmd.Context(), u, plan, st, yes, dryRun); err != nil {
 				return err
 			}
 			if signed, _ := tune.SigningStatus(); a.Name == tune.Git && !signed {

@@ -86,13 +86,14 @@ Clear one you trust with `agentctl proxy allow spark <model>`; anything that loo
 Code picks up new proxy models on its own at startup; the others need `agentctl refresh`.
 
 Routing Claude Code or OpenCode through a proxy asks for a one-time acknowledgement: Anthropic's terms forbid proxies
-that serve Claude subscription logins, and accounts on them can be banned. OpenCode's claude-agent needs turning on once
-with `opencode auth login claude-agent`.
+that serve Claude subscription logins, and accounts on them can be banned. Routing OpenCode also turns on its
+claude-agent provider (`opencode auth login claude-agent --method claude-login`), without which OpenCode lists no Claude
+models.
 
 ### T3 Code
 
 agentctl also runs [T3 Code](https://github.com/pingdotgg/t3code) on the same machine, on the nightly channel, as a
-background service (T3 Code under Agents in the dashboard):
+background service (T3 Code under Servers in the dashboard):
 
 ```sh
 agentctl t3 install                  # T3 Code's installer, then its background service
@@ -107,6 +108,25 @@ agentctl t3 uninstall                # remove the service; --all removes t3 too 
 
 Everything goes through T3 Code's own `t3` CLI, so updates started from a T3 Code desktop app reach the server too.
 
+### OpenCode web
+
+OpenCode v2 runs a background server that also serves its web app. agentctl drives it through `opencode` (OpenCode web
+under Servers in the dashboard):
+
+```sh
+agentctl opencode                    # running?, address, version, newer release
+agentctl opencode start              # start the server (it does not come back after a reboot on its own)
+agentctl opencode url https://box.your-tailnet.ts.net   # the address other devices use, once
+agentctl opencode pair               # one-time link and QR code; a device stays signed in for 30 days
+agentctl opencode remote on          # reach it from the internet over OpenTunnel; links then use that address
+agentctl opencode signout            # new server password: signs out every paired device
+agentctl opencode update             # opencode upgrade, then restart the server
+agentctl opencode restart | stop
+```
+
+The server listens on 127.0.0.1; put something like Tailscale Serve in front of it, or turn on OpenTunnel, for other
+devices.
+
 ## Develop
 
 Tools are pinned in `mise.toml`.
@@ -114,7 +134,7 @@ Tools are pinned in `mise.toml`.
 ```sh
 mise install
 mise run check     # vet, golangci-lint, race tests, build
-mise run install   # go install with version info
+mise run install   # build into ~/.local/bin (or $AGENTCTL_INSTALL_DIR), like install.sh
 mise run demo      # re-record the demo GIF (VHS; needs ttyd and ffmpeg)
 ```
 
@@ -131,6 +151,7 @@ internal/agent/opencode opencode.json routing (OpenCode v2, claude-agent)
 internal/agent/pi      models.json and settings.json routing
 internal/jsonc/        comment-preserving JSONC edits
 internal/t3/           T3 Code through its t3 CLI
+internal/ocweb/        OpenCode's web server through its opencode CLI
 internal/models/       which models count as Anthropic
 internal/proxy/        CLIProxyAPI client
 internal/tomledit/     comment-preserving TOML edits
