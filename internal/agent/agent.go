@@ -66,19 +66,20 @@ func (p Plan) Diff() string {
 		if c.noop() {
 			continue
 		}
+		path := Tilde(c.Path)
 		if c.Link != "" {
-			fmt.Fprintf(&b, "link %s -> %s\n", c.Path, c.Link)
+			fmt.Fprintf(&b, "link %s -> %s\n", path, Tilde(c.Link))
 			continue
 		}
 		if c.After == nil {
-			fmt.Fprintf(&b, "remove %s\n", c.Path)
+			fmt.Fprintf(&b, "remove %s\n", path)
 			continue
 		}
 		if c.Quiet {
-			fmt.Fprintf(&b, "write %s (generated, %d bytes)\n", c.Path, len(c.After))
+			fmt.Fprintf(&b, "write %s (generated, %d bytes)\n", path, len(c.After))
 			continue
 		}
-		b.WriteString(udiff.Unified(c.Path, c.Path, string(c.Before), string(c.After)))
+		b.WriteString(udiff.Unified(path, path, string(c.Before), string(c.After)))
 	}
 	return b.String()
 }
@@ -122,6 +123,18 @@ func (p Plan) Apply() error {
 		}
 	}
 	return nil
+}
+
+// Tilde shortens a path under the home directory to ~/..., for display.
+func Tilde(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
+		return "~/" + rest
+	}
+	return path
 }
 
 // ReadFile returns a file's bytes, or nil if it does not exist.

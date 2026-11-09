@@ -167,9 +167,34 @@ func Clip(text string, width, lines int) []string {
 	return out
 }
 
-// Wordmark is the product name in the site's "VOID(∅)" manner.
-func (p Palette) Wordmark() string {
-	return Fg(p.Text).Bold(true).Render("AGENTCTL") + Fg(p.Accent).Bold(true).Render("(∅)")
+// LogoLines is agentctl's logo, the word in figlet's Calvin S font. Every
+// line is LogoWidth cells wide.
+var LogoLines = [3]string{
+	"┌─┐┌─┐┌─┐┌┐┌┌┬┐┌─┐┌┬┐┬  ",
+	"├─┤│ ┬├┤ │││ │ │   │ │  ",
+	"┴ ┴└─┘└─┘┘└┘ ┴ └─┘ ┴ ┴─┘",
+}
+
+// LogoWidth is the logo's width in cells.
+const LogoWidth = 24
+
+// Tagline says what agentctl does, under the logo where there is room.
+const Tagline = "route coding agents to their own login or a CLIProxyAPI server"
+
+// Logo renders the logo with a gradient from the accent violet through
+// blue to cyan, column by column.
+func (p Palette) Logo() string {
+	colors := lipgloss.Blend1D(LogoWidth, p.Accent, p.Blue, p.Cyan)
+	var b strings.Builder
+	for i, line := range LogoLines {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		for x, r := range []rune(line) {
+			b.WriteString(Fg(colors[x]).Render(string(r)))
+		}
+	}
+	return b.String()
 }
 
 // Row renders one list row exactly width cells wide: icon, label in a

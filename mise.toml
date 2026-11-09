@@ -28,3 +28,11 @@ run = ["go vet ./...", "golangci-lint run"]
 [tasks.check]
 description = "Everything CI runs"
 depends = ["lint", "test", "build"]
+
+[tasks.demo]
+description = "Record the README demo GIF with VHS (needs ttyd and ffmpeg)"
+run = """
+. docs/demo/setup.sh /tmp/agentctl-demo
+trap 'kill $(cat /tmp/agentctl-demo/proxy.pid)' EXIT
+mise exec vhs@0.12.1 -- vhs docs/demo/demo.tape
+"""

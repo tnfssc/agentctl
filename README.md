@@ -1,6 +1,14 @@
 # agentctl
 
+```text
+┌─┐┌─┐┌─┐┌┐┌┌┬┐┌─┐┌┬┐┬
+├─┤│ ┬├┤ │││ │ │   │ │
+┴ ┴└─┘└─┘┘└┘ ┴ └─┘ ┴ ┴─┘
+```
+
 Switch coding agents between their own login and [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) servers.
+
+![agentctl: testing a proxy, routing Codex and OpenCode to it from the dashboard, then checking the status](https://github.com/tnfssc/agentctl/releases/download/v0.4.0/demo.gif)
 
 Works with Claude Code, Codex, [OpenCode](https://opencode.ai) (v2) and [Pi](https://pi.dev).
 
@@ -100,6 +108,7 @@ Tools are pinned in `mise.toml`.
 mise install
 mise run check     # vet, golangci-lint, race tests, build
 mise run install   # go install with version info
+mise run demo      # re-record the demo GIF (VHS; needs ttyd and ffmpeg)
 ```
 
 ```
@@ -107,12 +116,17 @@ cmd/agentctl/          main
 internal/app/          what agentctl does, shared by the CLI and the dashboard
 internal/cli/          cobra commands (fang for help and errors)
 internal/tui/dash/     the dashboard (layered scene, mouse hit testing)
-internal/tui/skin/     dashboard palette and UI styles
+internal/tui/skin/     dashboard palette, logo and UI styles
 internal/agent/        planned file changes: diff, backup, apply
 internal/agent/claude  settings.json routing
 internal/agent/codex   config.toml routing and the filtered model catalog
+internal/agent/opencode opencode.json routing (OpenCode v2, claude-agent)
+internal/agent/pi      models.json and settings.json routing
+internal/jsonc/        comment-preserving JSONC edits
+internal/t3/           T3 Code through its t3 CLI
 internal/models/       which models count as Anthropic
 internal/proxy/        CLIProxyAPI client
 internal/tomledit/     comment-preserving TOML edits
 internal/config/       agentctl's own config and state
+docs/demo/             the demo recording: VHS tape, fake proxy, scratch setup
 ```

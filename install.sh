@@ -55,6 +55,13 @@ trap 'rm -rf "$work"; rm -f "$staged"' EXIT
 cat "$work/$asset" > "$staged"
 chmod 755 "$staged"
 mv -f "$staged" "$install_dir/agentctl"
+cat <<'LOGO'
+
+┌─┐┌─┐┌─┐┌┐┌┌┬┐┌─┐┌┬┐┬
+├─┤│ ┬├┤ │││ │ │   │ │
+┴ ┴└─┘└─┘┘└┘ ┴ └─┘ ┴ ┴─┘
+
+LOGO
 printf 'Installed %s/agentctl\n' "$install_dir"
 case ":$PATH:" in
     *":$install_dir:"*) printf 'Run: agentctl\n' ;;

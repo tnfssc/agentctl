@@ -138,16 +138,16 @@ func (m Model) drawPage(sc *scene) {
 	}
 	w, h := m.width, m.height
 
-	// Nav: wordmark, text links, status pill.
-	sc.add(p.Wordmark(), 2, navTop+1, 1, "")
-	x := 20
+	// Nav: logo, text links, status pill.
+	sc.add(p.Logo(), 2, navTop, 1, "")
+	x := 2 + skin.LogoWidth + 4
 	for _, l := range navLinks {
 		style := skin.Fg(p.Muted)
 		if m.hover == l.id {
 			style = skin.Fg(p.Text).Underline(true)
 		}
 		sc.add(style.Render(l.label), x, navTop+1, 1, l.id)
-		x += lipgloss.Width(l.label) + 4
+		x += lipgloss.Width(l.label) + 3
 	}
 	// The pill shows whenever the terminal is wide enough, whatever it says.
 	if px := w - pillWidth - 2; px >= x {
@@ -450,7 +450,7 @@ func (m Model) proxyDetail(p skin.Palette, name string) detailView {
 	default:
 		d.heading = fmt.Sprintf("Live · %d models", len(r.Models))
 		d.facts[2] = fact(p, "latency", r.Latency.Round(time.Millisecond).String())
-		d.facts[3] = fact(p, "models", fmt.Sprintf("%d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
+		d.facts[3] = fact(p, "models", r.Counts.String())
 		if r.DiscoveryErr != nil || r.SlowDiscovery() {
 			d.facts[4] = skin.Fg(p.Amber).Render("! Claude Code may not list this proxy's models well; see Details")
 		}
@@ -775,15 +775,17 @@ func (m Model) proxyReport(name string) string {
 		default:
 			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code lists the proxy's models")
 		}
-		lines[5] = p.Label(fmt.Sprintf("Models · %d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
+		lines[5] = p.Label("Models · " + r.Counts.String())
 	}
 	idW, ownerW := width*4/10, 12
 	for _, pm := range r.Models {
 		var who string
-		switch models.Classify(pm.ID, pm.OwnedBy, px.AllowModels) {
-		case models.Anthropic:
+		switch class := models.Classify(pm.ID, pm.OwnedBy, px.AllowModels); {
+		case class == models.Anthropic:
 			who = skin.Fg(p.Accent).Render("Claude Code only")
-		case models.Other:
+		case !models.Chat(pm.ID):
+			who = skin.Fg(p.Dim).Render("not a chat model")
+		case class == models.Other:
 			who = skin.Fg(p.Blue).Render("all agents")
 		default:
 			who = warn.Render("unverified · agentctl proxy allow " + name + " " + pm.ID)

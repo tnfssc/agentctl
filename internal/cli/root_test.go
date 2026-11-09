@@ -52,7 +52,7 @@ func TestSwitchingEndToEnd(t *testing.T) {
 	home, url := setup(t)
 
 	out := must(t, "proxy", "add", "spark", "--url", url+"/v1", "--key", testutil.Key)
-	if !strings.Contains(out, "1 Claude (Claude Code only), 1 for all agents, 1 unverified") {
+	if !strings.Contains(out, "1 Claude · 1 all agents · 1 unverified") {
 		t.Fatalf("add output:\n%s", out)
 	}
 	info, err := os.Stat(filepath.Join(home, ".config", "agentctl", "config.toml"))

@@ -251,12 +251,29 @@ type Probe struct {
 	Latency   time.Duration
 	Models    []proxy.Model
 	ModelsErr error
-	Counts    struct{ Claude, Other, Unknown int }
+	Counts    Counts
 
 	// What Claude Code's model discovery would see.
 	DiscoveryErr     error
 	DiscoveryLatency time.Duration
 	Disguised        []string // ids Claude Code would see that the plain list does not have
+}
+
+// Counts sorts a proxy's models by who may use them.
+type Counts struct {
+	Claude  int // Claude Code only
+	Other   int // every agent
+	Unknown int // Claude Code only until allowed
+	NotChat int // image, audio and other models no agent drives
+}
+
+// String summarizes the counts, e.g. "3 Claude · 4 all agents · 0 unverified".
+func (c Counts) String() string {
+	s := fmt.Sprintf("%d Claude · %d all agents · %d unverified", c.Claude, c.Other, c.Unknown)
+	if c.NotChat > 0 {
+		s += fmt.Sprintf(" · %d not chat", c.NotChat)
+	}
+	return s
 }
 
 // Err reports whether the proxy is unusable.
@@ -296,10 +313,13 @@ func ProbeProxy(ctx context.Context, p config.Proxy) Probe {
 	plain := map[string]bool{}
 	for _, m := range r.Models {
 		plain[m.ID] = true
-		switch models.Classify(m.ID, m.OwnedBy, p.AllowModels) {
-		case models.Anthropic:
+		class := models.Classify(m.ID, m.OwnedBy, p.AllowModels)
+		switch {
+		case class == models.Anthropic:
 			r.Counts.Claude++
-		case models.Other:
+		case !models.Chat(m.ID):
+			r.Counts.NotChat++
+		case class == models.Other:
 			r.Counts.Other++
 		default:
 			r.Counts.Unknown++

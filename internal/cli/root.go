@@ -8,6 +8,8 @@ import (
 
 	"charm.land/fang/v2"
 	"github.com/spf13/cobra"
+
+	"github.com/tnfssc/agentctl/internal/tui/skin"
 )
 
 // Set through -ldflags at release time; see scripts/release-build.sh.
@@ -30,7 +32,8 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agentctl",
 		Short: "Switch coding agents between their own login and CLIProxyAPI servers",
-		Long: "agentctl routes Claude Code, Codex, OpenCode and Pi either to their own login or to a CLIProxyAPI\n" +
+		Long: skin.New(true).Logo() + "\n\n" +
+			"agentctl routes Claude Code, Codex, OpenCode and Pi either to their own login or to a CLIProxyAPI\n" +
 			"server, by editing the agents' own config files. Claude models only ever run through Claude Code.",
 		Example: `  agentctl proxy add spark --url https://spark.example.ts.net:8445
   agentctl proxy test

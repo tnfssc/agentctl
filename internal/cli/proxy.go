@@ -209,10 +209,12 @@ func newProxyModelsCmd() *cobra.Command {
 			}
 			for _, m := range list {
 				var who string
-				switch c := models.Classify(m.ID, m.OwnedBy, p.AllowModels); c {
-				case models.Anthropic:
+				switch c := models.Classify(m.ID, m.OwnedBy, p.AllowModels); {
+				case c == models.Anthropic:
 					who = u.s.Accent.Render("Claude Code only")
-				case models.Other:
+				case !models.Chat(m.ID):
+					who = u.s.Subtle.Render("not a chat model")
+				case c == models.Other:
 					who = u.s.Success.Render("all agents")
 				default:
 					who = u.s.Warning.Render("Claude Code only (unverified; `agentctl proxy allow " + args[0] + " " + m.ID + "`)")
@@ -278,8 +280,7 @@ func report(u *ui, name string, p config.Proxy, r app.Probe) {
 		u.fail("models: " + r.ModelsErr.Error())
 		return
 	}
-	u.ok(fmt.Sprintf("key accepted, %d models: %d Claude (Claude Code only), %d for all agents, %d unverified",
-		len(r.Models), r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
+	u.ok(fmt.Sprintf("key accepted, %d models: %s", len(r.Models), r.Counts))
 	switch {
 	case r.DiscoveryErr != nil:
 		u.warn("Claude Code's /model list will not show proxy models: " + r.DiscoveryErr.Error())
