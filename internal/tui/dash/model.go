@@ -22,6 +22,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
+	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
@@ -47,6 +48,7 @@ const (
 	pairFormDialog        // name and address for a new pairing link
 	pairDialog            // the new pairing link and its QR code
 	serviceDialog         // restart, repair or uninstall T3 Code's service
+	signingDialog         // how to set up commit signing with an agent
 )
 
 // option is one row of a pick list.
@@ -99,7 +101,10 @@ type Model struct {
 	st       *config.State
 	statuses []agentStatus
 	probes   map[string]app.Probe // missing means still checking
-	loaded   bool
+
+	signed     bool // commits are signed (global git config)
+	signingKey string
+	loaded     bool
 
 	dialog  dialog
 	focus   int    // selected sidebar item on the home screen
@@ -288,6 +293,7 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	}
 	first := !m.loaded
 	m.cfg, m.st, m.statuses, m.loaded = msg.cfg, msg.st, msg.statuses, true
+	m.signed, m.signingKey = msg.signed, msg.signingKey
 	m.focus = min(m.focus, len(m.homeIDs())-1)
 	if !first {
 		return m, nil
@@ -313,7 +319,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
-	ids = append(ids, "t3", "behavior")
+	ids = append(ids, "t3", "behavior", "git")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -375,6 +381,11 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
 	case "behavior":
 		return m.act("tune:" + tune.Instructions)
+	case "git":
+		return m.act("tune:" + tune.Git)
+	case "signing":
+		m.dialog = signingDialog
+		return m, nil
 	case "t3":
 		// Opening the row presses its primary button.
 		for _, b := range m.t3Detail(m.pal).buttons {
@@ -435,6 +446,9 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	case "copy":
 		m.toast, m.toastErr = "Copied the link", false
 		return m, tea.SetClipboard(m.pairing.URL)
+	case "copy-guide":
+		m.toast, m.toastErr = "Copied; paste it into your coding agent", false
+		return m, tea.SetClipboard(guide.Command("signing"))
 	case "back":
 		return m.openRoutes(m.statusOf(m.req.Agent))
 	case "opt":
@@ -590,6 +604,16 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "p", "enter":
 			return m.actDialog("pair")
 		case "esc", "q":
+			return m.close("", false), nil
+		}
+		return m, nil
+	case signingDialog:
+		switch k {
+		case "c":
+			if !m.remote {
+				return m.actDialog("copy-guide")
+			}
+		case "enter", "esc", "q":
 			return m.close("", false), nil
 		}
 		return m, nil
@@ -865,8 +889,11 @@ func (m Model) usedBy(name string) string {
 }
 
 func title(agentName string) string {
-	if agentName == tune.Instructions {
+	switch agentName {
+	case tune.Instructions:
 		return tune.InstructionsTitle
+	case tune.Git:
+		return tune.GitTitle
 	}
 	if a, err := app.FindAgent(agentName); err == nil {
 		return a.Title

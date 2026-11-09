@@ -72,7 +72,13 @@ that should stay on the proxy's machine, `--key-cmd` runs a command to print it 
 `agentctl tune claude` (or the Tune button) applies curated settings: fewer unused tools, no background spend,
 privacy without losing features, and an opt-in "never ask for approval". `agentctl tune instructions` (Behavior in
 the dashboard) adds curated sections to your shared `~/.agents/AGENTS.md`, which Claude Code reads too; your own text
-there is never touched. Unticking an item, or "Reset to default", puts the defaults back. You review a diff before anything is written.
+there is never touched. `agentctl tune git` (Git in the dashboard) sets git up for agents in your global git config:
+merge on pull, upstream set on first push, conflicts with the common base, remembered resolutions, clearer diffs, pruned
+remote branches. Unticking an item, or "Reset to default", puts the defaults back. You review a diff before anything is
+written.
+
+agentctl doesn't touch signing keys. `agentctl guide signing` prints instructions for your coding agent instead: paste
+the command into it and it walks you through the key, git and GitHub.
 
 Models agentctl cannot prove are non-Anthropic, and image or audio models, are hidden from Codex, OpenCode and Pi.
 Clear one you trust with `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude

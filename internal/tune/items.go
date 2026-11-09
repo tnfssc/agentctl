@@ -136,6 +136,8 @@ func Items(agentName string) []Item {
 		return codexItems
 	case Instructions:
 		return instructionItems
+	case Git:
+		return gitItems
 	}
 	return nil
 }

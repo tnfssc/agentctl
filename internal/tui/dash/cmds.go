@@ -16,10 +16,12 @@ import (
 // models`, file writes) runs in a command and reports back with one of these.
 type (
 	loadedMsg struct {
-		cfg      *config.Config
-		st       *config.State
-		statuses []agentStatus
-		err      error
+		cfg        *config.Config
+		st         *config.State
+		statuses   []agentStatus
+		signed     bool
+		signingKey string
+		err        error
 	}
 	probedMsg struct {
 		name  string
@@ -71,6 +73,7 @@ func load() tea.Msg {
 		return loadedMsg{err: err}
 	}
 	msg := loadedMsg{cfg: cfg, st: st}
+	msg.signed, msg.signingKey = tune.SigningStatus()
 	for _, a := range app.Agents {
 		s, err := a.Status(cfg)
 		msg.statuses = append(msg.statuses, agentStatus{agent: a, status: s, err: err})

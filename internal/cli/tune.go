@@ -9,27 +9,32 @@ import (
 
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
+	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/tune"
 )
 
 func newTuneCmd() *cobra.Command {
 	var yes, dryRun, reset bool
 	cmd := &cobra.Command{
-		Use:   "tune <claude|codex|instructions>",
+		Use:   "tune <claude|codex|instructions|git>",
 		Short: "Apply agentctl's curated settings, or reset them",
 		Long: "Pick curated settings for Claude Code or Codex (fewer unused tools, no background spend, privacy\n" +
-			"without losing features), or curated agent instructions, written to ~/.agents/AGENTS.md.\n" +
-			" Unticking an item resets it to the default.",
+			"without losing features), curated agent instructions, written to ~/.agents/AGENTS.md, or git settings\n" +
+			"that make agents' git work smoother, in your global git config. Unticking an item resets it to the\n" +
+			"default.",
 		Example: `  agentctl tune claude             # pick interactively
   agentctl tune codex --yes        # apply the recommended set
   agentctl tune instructions       # shared behavior for every agent
+  agentctl tune git                # merge on pull, clearer conflicts and diffs
   agentctl tune claude --reset     # undo every curated setting`,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: append(app.AgentNames(), tune.Instructions),
+		ValidArgs: append(app.AgentNames(), tune.Instructions, tune.Git),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			u := newUI(cmd)
 			a := app.Agent{Name: tune.Instructions, Title: tune.InstructionsTitle}
-			if args[0] != tune.Instructions {
+			if args[0] == tune.Git {
+				a = app.Agent{Name: tune.Git, Title: tune.GitTitle}
+			} else if args[0] != tune.Instructions {
 				var err error
 				if a, err = app.FindAgent(args[0]); err != nil {
 					return err
@@ -59,7 +64,14 @@ func newTuneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return confirmAndApply(u, plan, st, yes, dryRun)
+			if err := confirmAndApply(u, plan, st, yes, dryRun); err != nil {
+				return err
+			}
+			if signed, _ := tune.SigningStatus(); a.Name == tune.Git && !signed {
+				u.println(u.s.Subtle.Render("Commits aren't signed. To set it up, paste this into your coding agent: " +
+					guide.Command("signing")))
+			}
+			return nil
 		},
 	}
 	f := cmd.Flags()

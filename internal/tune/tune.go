@@ -84,6 +84,16 @@ func open(agentName string) (*session, error) {
 			return nil, err
 		}
 		s.doc = &mdDoc{src: s.before}
+	case Git:
+		if s.path, err = GitConfigPath(); err != nil {
+			return nil, err
+		}
+		if s.before, err = agent.ReadFile(s.path); err != nil {
+			return nil, err
+		}
+		if s.doc, err = newGitDoc(s.before); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unknown agent %q", agentName)
 	}
@@ -91,6 +101,13 @@ func open(agentName string) (*session, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// close removes the session's scratch files.
+func (s *session) close() {
+	if d, ok := s.doc.(*gitDoc); ok {
+		d.close()
+	}
 }
 
 func (s *session) holds(op Op) bool {
@@ -115,6 +132,7 @@ func Inspect(agentName string) ([]Status, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer s.close()
 	items := Items(agentName)
 	out := make([]Status, len(items))
 	for i, it := range items {
@@ -147,6 +165,7 @@ func Plan(agentName string, want map[string]bool) (agent.Plan, error) {
 	if err != nil {
 		return agent.Plan{}, err
 	}
+	defer s.close()
 	plan := agent.Plan{Agent: agentName}
 	for _, it := range Items(agentName) {
 		applied := s.applied(it)
@@ -171,6 +190,9 @@ func Plan(agentName string, want map[string]bool) (agent.Plan, error) {
 	}
 
 	after := s.doc.bytes()
+	if s.agent == Git && len(bytes.TrimSpace(after)) == 0 {
+		after = nil // nothing left: no file, as before agentctl wrote one
+	}
 	if s.agent == claude.Name {
 		after = claude.Format(after, s.before)
 		if s.before == nil && string(after) == "{}\n" {

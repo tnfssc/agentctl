@@ -193,6 +193,7 @@ var hintTexts = map[dialog]string{
 	pairFormDialog: "tab next · enter submit · esc",
 	pairDialog:     "c copy · enter done",
 	serviceDialog:  "↑↓ · enter choose · esc back",
+	signingDialog:  "c copy · enter done",
 }
 
 var maxHintWidth = func() int {
@@ -203,7 +204,12 @@ var maxHintWidth = func() int {
 	return n
 }()
 
-func (m Model) hints() string { return hintTexts[m.dialog] }
+func (m Model) hints() string {
+	if m.dialog == signingDialog && m.remote {
+		return "enter done" // no clipboard over SSH
+	}
+	return hintTexts[m.dialog]
+}
 
 // pill summarizes proxy health like the site's "prod server / running".
 func (m Model) pill(p skin.Palette) string {
@@ -249,7 +255,7 @@ func (m Model) proxyWindow(listTop, bottom int) (first, rows int) {
 	if len(names) <= rows {
 		return 0, rows
 	}
-	sel := m.focus - len(m.statuses) - 2 // agents, T3 Code, then the behavior row
+	sel := m.focus - len(m.statuses) - 3 // agents, T3 Code, then instructions and git
 	first = max(0, min(sel-rows+1, len(names)-rows))
 	return first, rows
 }
@@ -265,9 +271,15 @@ func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
 	row := func(y int, id, icon, label string, labelW int, detail string) {
 		sc.add(p.Row(icon, label, labelW, detail, rw, id == selected, m.hover == "nav:"+id), 2, y, 2, "nav:"+id)
 	}
+	// Short terminals put section labels right on their rows; the gap
+	// depends on the terminal size only.
+	gap := 1
+	if m.height < 26 {
+		gap = 0
+	}
 	y := pageTop + 1
 	sc.add(p.Label("Agents"), 3, y, 1, "")
-	y += 2
+	y += 1 + gap
 	for _, as := range m.statuses {
 		detail := "own login"
 		if as.status.Route != agent.Local {
@@ -280,16 +292,18 @@ func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
 	y++
 	y++
 	sc.add(p.Label("Behavior"), 3, y, 1, "")
-	row(y+2, "behavior", "◇", "Instructions", 11, "all agents")
-	y += 4
+	y += 1 + gap
+	row(y, "behavior", "◇", "Instructions", 11, "all agents")
+	row(y+1, "git", "◇", "Git", 11, m.signingState())
+	y += 3
 	names := m.cfg.Names()
-	first, rows := m.proxyWindow(y+2, bottom)
+	first, rows := m.proxyWindow(y+1+gap, bottom)
 	label := p.Label("Proxies")
 	if len(names) > rows {
 		label += skin.Fg(p.Dim).Render(fmt.Sprintf("  %d–%d of %d", first+1, first+rows, len(names)))
 	}
 	sc.add(label, 3, y, 1, "")
-	y += 2
+	y += 1 + gap
 	for i, n := range names[first:min(len(names), first+rows)] {
 		row(y+i, "proxy:"+n, m.proxyDot(p, n), n, rw-4, "")
 	}
@@ -353,6 +367,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.proxyDetail(p, name)
 	case "t3":
 		return m.t3Detail(p)
+	case "git":
+		return m.gitDetail(p)
 	case "behavior":
 		path, _ := tune.InstructionsPath()
 		d := detailView{
@@ -631,6 +647,8 @@ func (m Model) drawDialog(sc *scene) {
 		m.drawPairForm(sc)
 	case pairDialog:
 		m.drawPairing(sc)
+	case signingDialog:
+		m.drawSigning(sc)
 	case serviceDialog:
 		m.panel(sc, "T3 Code · service", "Background service", nil, cancel, nil)
 		text([]string{skin.Fg(p.Muted).Render("Runs T3 Code at boot under systemd or launchd; data in " + tildePath(m.t3.Home) + ".")})

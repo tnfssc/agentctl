@@ -25,7 +25,7 @@ func Home(t *testing.T) string {
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	// Variables that would point an agent at the real config instead.
-	for _, k := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "PI_CODING_AGENT_DIR", "OPENCODE_CONFIG_DIR", "T3CODE_HOME"} {
+	for _, k := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "PI_CODING_AGENT_DIR", "OPENCODE_CONFIG_DIR", "T3CODE_HOME", "GIT_CONFIG_GLOBAL"} {
 		t.Setenv(k, "")
 	}
 	prev := agent.Executable

@@ -182,3 +182,28 @@ func TestTuneInstructions(t *testing.T) {
 	}
 	must(t, "tune", "instructions", "--reset", "--yes")
 }
+
+func TestGuideAndTuneGit(t *testing.T) {
+	home := testutil.Home(t)
+	if out := must(t, "guide"); !strings.Contains(out, "signing") {
+		t.Fatalf("guide list:\n%s", out)
+	}
+	if out := must(t, "guide", "signing"); !strings.Contains(out, "gpg.format ssh") || !strings.Contains(out, "ask before") {
+		t.Fatalf("signing guide:\n%s", out)
+	}
+	if _, err := execute(t, "guide", "nope"); err == nil {
+		t.Fatal("an unknown guide should fail")
+	}
+	out := must(t, "tune", "git", "--yes")
+	if !strings.Contains(out, "agentctl guide signing") {
+		t.Fatalf("unsigned commits should point at the guide:\n%s", out)
+	}
+	cfg, _ := os.ReadFile(filepath.Join(home, ".gitconfig"))
+	if !strings.Contains(string(cfg), "conflictStyle = zdiff3") {
+		t.Fatalf(".gitconfig:\n%s", cfg)
+	}
+	must(t, "tune", "git", "--reset", "--yes")
+	if _, err := os.Stat(filepath.Join(home, ".gitconfig")); !os.IsNotExist(err) {
+		t.Fatalf("reset should remove the config agentctl created: %v", err)
+	}
+}

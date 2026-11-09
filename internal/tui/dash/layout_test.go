@@ -111,7 +111,7 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		states = append(states, state{"busy", busy}, state{"toast", toast})
 
 		sameRects(t, states,
-			"pill", "status", "hints", "nav:agent:claude", "nav:agent:codex", "nav:behavior", "nav:proxy:spark", "nav:add",
+			"pill", "status", "hints", "nav:agent:claude", "nav:agent:codex", "nav:behavior", "nav:git", "nav:proxy:spark", "nav:add",
 			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "add", "testall", "refresh", "quit")
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
@@ -220,6 +220,13 @@ func dialogStates(t *testing.T, m Model) []state {
 		}
 		add(fmt.Sprintf("devices %d scrolled", n), dev)
 	}
+	add("signing", send(t, m, click("signing")))
+	remote := m
+	remote.remote = true
+	add("signing over ssh", send(t, remote, click("signing")))
+	signed := m
+	signed.signed, signed.signingKey = true, "~/.ssh/id_ed25519_signing.pub"
+	add("signing done", send(t, signed, click("signing")))
 	svc := m
 	svc.t3, svc.t3Loaded = t3States()["running"].st, true
 	add("service", send(t, svc, click("t3-service")))
@@ -253,7 +260,7 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		for _, slot := range [][]string{
 			{"m:ack", "m:apply", "m:submit", "m:tune-review", "m:remove", "m:close-btn", "m:yes", "m:pair", "m:submit-pair"},
 			{"m:cancel", "m:revoke-idle"},
-			{"m:back", "m:test", "m:tune-reset", "m:revoke", "m:copy"},
+			{"m:back", "m:test", "m:tune-reset", "m:revoke", "m:copy", "m:copy-guide"},
 		} {
 			var want *rect
 			for _, s := range states {

@@ -250,3 +250,45 @@ func must[T any](v T, err error) T {
 	}
 	return v
 }
+
+func TestGitRecommendedThenReset(t *testing.T) {
+	home := testutil.Home(t)
+	path := filepath.Join(home, ".gitconfig")
+	mine := "[user]\n\tname = Someone\n[pull]\n\trebase = false\n"
+	write(t, path, mine)
+
+	statuses, err := Inspect(Git)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statuses[0].Applied {
+		t.Fatal("pull.rebase alone is not the whole merge-on-pull item")
+	}
+	run(t, Git, Recommended(statuses))
+	got, _ := os.ReadFile(path)
+	for _, want := range []string{"name = Someone", "ff = true", "autoSetupRemote = true", "conflictStyle = zdiff3", "enabled = true", "algorithm = histogram", "prune = true"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("gitconfig missing %q:\n%s", want, got)
+		}
+	}
+	if st, _ := Inspect(Git); !st[0].Applied || !st[len(st)-1].Applied {
+		t.Fatal("applied items should read as applied")
+	}
+	if plan, err := Plan(Git, Recommended(must(Inspect(Git)))); err != nil || !plan.Empty() {
+		t.Fatalf("applying again should change nothing: %v\n%s", err, plan.Diff())
+	}
+
+	run(t, Git, map[string]bool{})
+	if got, _ := os.ReadFile(path); string(got) != "[user]\n\tname = Someone\n" {
+		t.Fatalf("reset unsets every managed key, the user's pull.rebase included, and keeps the rest:\n%s", got)
+	}
+}
+
+func TestGitWithoutConfigCreatesNothingOnReset(t *testing.T) {
+	home := testutil.Home(t)
+	run(t, Git, map[string]bool{"prune": true})
+	run(t, Git, map[string]bool{})
+	if _, err := os.Stat(filepath.Join(home, ".gitconfig")); !os.IsNotExist(err) {
+		t.Fatalf("a config agentctl created and emptied should be gone: %v", err)
+	}
+}
