@@ -37,7 +37,7 @@ func TestSnapshots(t *testing.T) {
 	frames["routes"] = routes
 	frames["models"] = send(t, routes, keyPress("down"), keyPress("enter"), modelsMsg{route: "spark", list: r.Models})
 	proxyFocus := m
-	proxyFocus.focus = 4
+	proxyFocus.focus = idx(proxyFocus, "proxy:spark")
 	frames["proxy"] = send(t, proxyFocus, keyPress("enter"))
 	add, _ := m.openAdd()
 	frames["add"] = add.(Model)
@@ -45,7 +45,7 @@ func TestSnapshots(t *testing.T) {
 	hover.hover = "switch:claude"
 	frames["hover"] = hover
 	selected := m
-	selected.focus = 4
+	selected.focus = idx(selected, "proxy:spark")
 	frames["selected-proxy"] = selected
 	routed := send(t, m, loadedMsg{cfg: m.cfg, st: m.st, statuses: []agentStatus{
 		m.statuses[0], {agent: m.statuses[1].agent, status: app.Status{Route: "spark", URL: "https://spark.example:8445", Model: "gpt-6.1-sol"}},
@@ -54,7 +54,7 @@ func TestSnapshots(t *testing.T) {
 	frames["routed-codex"] = routed
 
 	withT3 := send(t, m, t3States()["update"])
-	withT3.focus = 2
+	withT3.focus = idx(withT3, "t3")
 	frames["t3"] = withT3
 	frames["t3-service"] = send(t, withT3, click("t3-service"))
 	devices := send(t, withT3, t3AccessMsg{list: accessList(12)}, keyPress("down"))

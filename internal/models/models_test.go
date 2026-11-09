@@ -31,3 +31,15 @@ func TestClassify(t *testing.T) {
 		}
 	}
 }
+
+func TestChat(t *testing.T) {
+	for id, want := range map[string]bool{
+		"gpt-6.1-sol": true, "codex-auto-review": true, "gemini-3.1-pro": true, "palmyra-x6": true,
+		"gpt-image-2.5-flare": false, "dall-e-3": false, "text-embedding-3-large": false, "gpt-4o-mini-tts": false,
+		"whisper-1": false, "gpt-realtime": false, "omni-moderation-latest": false,
+	} {
+		if got := Chat(id); got != want {
+			t.Errorf("Chat(%q) = %v, want %v", id, got, want)
+		}
+	}
+}

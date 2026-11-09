@@ -155,7 +155,7 @@ func BuildCatalog(ctx context.Context, proxyModels []proxy.Model, allow []string
 		entries []map[string]any
 	)
 	for i, pm := range proxyModels {
-		if !models.Usable(models.Classify(pm.ID, pm.OwnedBy, allow)) {
+		if !models.Usable(models.Classify(pm.ID, pm.OwnedBy, allow)) || !models.Chat(pm.ID) {
 			cat.Hidden = append(cat.Hidden, pm.ID)
 			continue
 		}
@@ -328,7 +328,7 @@ timeout_ms = 30000
 		{Path: catPath, Before: catBefore, After: append(slices.Clip(cat.JSON), '\n'), Perm: 0o600, Quiet: true},
 	}
 	if len(cat.Hidden) > 0 {
-		plan.Warnings = append(plan.Warnings, "hidden from Codex (Claude or unverified): "+strings.Join(cat.Hidden, ", "))
+		plan.Warnings = append(plan.Warnings, "hidden from Codex (Claude, unverified or not chat models): "+strings.Join(cat.Hidden, ", "))
 	}
 	return plan, nil
 }

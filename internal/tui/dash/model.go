@@ -1,6 +1,6 @@
 // Package dash is the full-screen dashboard behind bare `agentctl`: see
 // where each agent is routed and which proxies work, switch routes, add,
-// test and remove proxies, and refresh Codex's model list. Everything works
+// test and remove proxies, and refresh agents' model lists. Everything works
 // with the mouse (click, hover, wheel) and the keyboard.
 package dash
 
@@ -22,7 +22,6 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
-	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
@@ -230,6 +229,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m.close(msg.err.Error(), true), load
 		}
+		if msg.plan.Agent == app.ModelLists {
+			return m.close("Model lists updated. Restart running sessions to pick them up.", false), load
+		}
 		if msg.plan.Route == "" {
 			return m.close(title(msg.plan.Agent)+" settings updated. Restart running sessions to pick them up.", false), load
 		}
@@ -396,7 +398,7 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 	case "add", "add-btn":
 		return m.openAdd()
 	case "refresh":
-		m.busy = "Refreshing Codex's model list"
+		m.busy = "Refreshing model lists"
 		return m, refresh(m.ctx, m.cfg, m.st)
 	case "testall":
 		return m, m.probeAll()
@@ -705,18 +707,10 @@ func (m Model) onModels(msg modelsMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m.close(msg.route+": "+msg.err.Error(), true), nil
 	}
-	allow := m.cfg.Proxies[msg.route].AllowModels
+	usable, _ := app.UsableModels(msg.list, m.cfg.Proxies[msg.route].AllowModels)
 	m.options = []option{{label: "Keep the current model", detail: "or the proxy's best if it lacks it"}}
-	for _, pm := range msg.list {
-		class := models.Classify(pm.ID, pm.OwnedBy, allow)
-		if m.req.Agent != claude.Name && !models.Usable(class) {
-			continue
-		}
-		detail := pm.OwnedBy
-		if class == models.Anthropic {
-			detail += " · Claude"
-		}
-		m.options = append(m.options, option{label: pm.ID, detail: detail, value: pm.ID})
+	for _, pm := range usable {
+		m.options = append(m.options, option{label: pm.ID, detail: pm.OwnedBy, value: pm.ID})
 	}
 	m.pick, m.top = 0, 0
 	m.dialog = modelDialog
@@ -727,11 +721,11 @@ func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 	m.busy = ""
 	switch {
 	case errors.Is(msg.err, app.ErrNothingToRefresh):
-		return m.close("Codex uses its own login; nothing to refresh", false), nil
+		return m.close("No agent is routed through a proxy; nothing to refresh", false), nil
 	case msg.err != nil:
 		return m.close(msg.err.Error(), true), nil
 	case msg.plan.Empty() && msg.refresh:
-		return m.close("Codex's model list is already up to date", false), nil
+		return m.close("Model lists are already up to date", false), nil
 	case msg.plan.Empty() && msg.plan.Route == "":
 		return m.close(title(msg.plan.Agent)+" settings already match; nothing to change", false), nil
 	case msg.plan.Empty():

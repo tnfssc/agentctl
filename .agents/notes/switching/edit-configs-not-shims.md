@@ -18,4 +18,9 @@ Decided 2026-11-09 with the user.
   The previous local `model` is saved in state and restored on `use codex local`.
 - Claude through a proxy is allowed after a one-time acknowledged warning (Anthropic terms; see claude-lock notes).
   The Claude lock is soft: Codex's catalog omits Claude/unverified models; typing one by hand is the user's problem.
-- v1 scope: Claude Code and Codex only; it configures the machine it runs on.
+- Scope: Claude Code and Codex first; OpenCode v2 and Pi added 2026-11-09 (see `agents/`). It configures the machine
+  it runs on.
+- Agents other than Claude Code only list the proxy's models that are proven non-Anthropic and look like chat models
+  (`models.Chat` drops image/audio/embedding ids such as gpt-image-*, which Codex used to list).
+- `agentctl refresh` rebuilds every routed agent's list (Codex, OpenCode, Pi) as one plan; each change backs up under
+  its own agent.

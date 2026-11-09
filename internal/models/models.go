@@ -77,3 +77,10 @@ func Normalize(id string) string {
 	}
 	return s
 }
+
+// nonChat matches models that can't drive a coding agent: image, audio,
+// embedding and moderation models served next to the chat ones.
+var nonChat = regexp.MustCompile(`(?i)(^|[^a-z0-9])(image|dall-e|tts|whisper|transcribe|embedding|embed|moderation|realtime|audio)([^a-z0-9]|$)`)
+
+// Chat reports whether a model looks like one a coding agent can talk to.
+func Chat(id string) bool { return !nonChat.MatchString(Normalize(id)) }

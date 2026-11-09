@@ -17,6 +17,13 @@ type State struct {
 	// CodexLocalModel is the model Codex used before it was routed to a
 	// proxy, restored on `use codex local`.
 	CodexLocalModel string `json:"codex_local_model,omitempty"`
+	// PiLocalProvider and PiLocalModel are Pi's default before it was
+	// routed to a proxy.
+	PiLocalProvider string `json:"pi_local_provider,omitempty"`
+	PiLocalModel    string `json:"pi_local_model,omitempty"`
+	// OpenCodeLocalModel is OpenCode's "provider/model" before it was
+	// routed to a proxy.
+	OpenCodeLocalModel string `json:"opencode_local_model,omitempty"`
 }
 
 func statePath() (string, error) {

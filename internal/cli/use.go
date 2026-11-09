@@ -21,10 +21,13 @@ func newUseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "use <agent> <local|proxy>",
 		Short: "Route an agent to its own login or to a proxy",
-		Long: "Route Claude Code or Codex to its own login (local) or to an attached proxy.\n\n" +
+		Long: "Route Claude Code, Codex, OpenCode or Pi to its own login (local) or to an attached proxy.\n\n" +
 			"local uses whatever the agent itself is logged in with; nothing is copied. A proxy uses the\n" +
-			"accounts logged in on that proxy. Codex only ever sees the proxy's non-Claude models.",
+			"accounts logged in on that proxy. Only Claude Code sees the proxy's Claude models; OpenCode\n" +
+			"reaches them through its claude-agent provider, which runs Claude Code.",
 		Example: `  agentctl use codex spark --model gpt-6.1-sol
+  agentctl use opencode spark
+  agentctl use pi spark --model gpt-6.1-sol
   agentctl use claude local
   agentctl use codex local --dry-run`,
 		Args: cobra.ExactArgs(2),
@@ -47,7 +50,7 @@ func newUseCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&model, "model", "", "Codex model to use on the proxy (Claude Code uses /model)")
+	f.StringVar(&model, "model", "", "default model on the proxy for Codex, OpenCode or Pi (Claude Code uses /model)")
 	f.BoolVarP(&yes, "yes", "y", false, "apply without asking")
 	f.BoolVar(&dryRun, "dry-run", false, "show the changes without applying them")
 	return cmd
@@ -57,9 +60,10 @@ func newRefreshCmd() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "refresh",
-		Short: "Rebuild Codex's model list from its proxy",
-		Long: "Codex's model list is a snapshot taken when it was routed to a proxy. Run this after the\n" +
-			"proxy gains or drops models. Claude Code needs no refresh; it asks the proxy at startup.",
+		Short: "Rebuild the model lists of agents routed through a proxy",
+		Long: "Codex, OpenCode and Pi get a snapshot of the proxy's models when they are routed to it. Run this\n" +
+			"after the proxy gains or drops models, or its key changes. Claude Code needs no refresh; it asks\n" +
+			"the proxy at startup.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			u := newUI(cmd)
@@ -67,7 +71,7 @@ func newRefreshCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			plan, err := app.RefreshCodex(cmd.Context(), cfg, st)
+			plan, err := app.Refresh(cmd.Context(), cfg, st)
 			if errors.Is(err, app.ErrNothingToRefresh) {
 				u.ok(err.Error())
 				return nil
@@ -121,6 +125,10 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 		u.warn(w)
 	}
 	if plan.Empty() {
+		if plan.Agent == app.ModelLists {
+			u.ok("model lists are already up to date")
+			return nil
+		}
 		if plan.Route == "" {
 			u.ok(plan.Agent + " settings already match; nothing to change")
 		} else {
@@ -143,6 +151,10 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 	}
 	if err := app.Apply(plan, st); err != nil {
 		return err
+	}
+	if plan.Agent == app.ModelLists {
+		u.ok("Model lists updated. Restart running sessions to pick them up.")
+		return nil
 	}
 	if plan.Route == "" {
 		u.ok(fmt.Sprintf("%s settings updated. Restart running %s sessions to pick them up.", plan.Agent, plan.Agent))

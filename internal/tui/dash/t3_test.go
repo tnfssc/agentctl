@@ -64,7 +64,7 @@ func t3States() map[string]t3LoadedMsg {
 func TestT3HomeHasNoLayoutShift(t *testing.T) {
 	for _, sz := range sizes {
 		m := base(t, sz[0], sz[1])
-		m.focus = 2 // T3 Code
+		m.focus = idx(m, "t3")
 		starting := send(t, m, t3States()["stopped"])
 		starting.t3Starting = true
 		states := []state{{"checking", m}, {"starting", starting}}
@@ -99,7 +99,7 @@ func TestT3HomeHasNoLayoutShift(t *testing.T) {
 func TestT3RowOpensItsPrimaryAction(t *testing.T) {
 	msgs := t3States()
 	m := send(t, base(t, 120, 40), msgs["not installed"])
-	m.focus = 2
+	m.focus = idx(m, "t3")
 	if m = send(t, m, keyPress("enter")); m.dialog != askDialog || m.ask.button != "Install" {
 		t.Fatalf("enter on an uninstalled T3 Code should ask to install: dialog %v ask %+v", m.dialog, m.ask)
 	}
@@ -180,7 +180,7 @@ func TestPairingShowsQRWhenItFits(t *testing.T) {
 func TestRestartWaitsForTheServer(t *testing.T) {
 	msgs := t3States()
 	m := send(t, base(t, 120, 40), msgs["running"])
-	m.focus = 2
+	m.focus = idx(m, "t3")
 	m = send(t, m, click("t3-service"), keyPress("enter"))
 	if m.dialog != askDialog || m.ask.button != "Restart" {
 		t.Fatalf("Service then enter should ask to restart: dialog %v ask %+v", m.dialog, m.ask)
@@ -213,7 +213,7 @@ func TestNoQRWithoutColor(t *testing.T) {
 
 func TestUninstallFromServiceMenu(t *testing.T) {
 	m := send(t, base(t, 120, 40), t3States()["running"])
-	m.focus = 2
+	m.focus = idx(m, "t3")
 	m = send(t, m, click("t3-service"), click("m:opt:2"))
 	if m.dialog != askDialog || m.ask.button != "Uninstall" {
 		t.Fatalf("dialog %v ask %+v", m.dialog, m.ask)

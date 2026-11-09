@@ -14,6 +14,8 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/agent/codex"
+	"github.com/tnfssc/agentctl/internal/agent/opencode"
+	"github.com/tnfssc/agentctl/internal/agent/pi"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tune"
@@ -126,7 +128,7 @@ func (m Model) sidebarWidth() int {
 }
 
 var navLinks = []struct{ label, id string }{
-	{"Add proxy", "add"}, {"Test proxies", "testall"}, {"Refresh Codex", "refresh"}, {"Quit", "quit"},
+	{"Add proxy", "add"}, {"Test proxies", "testall"}, {"Refresh models", "refresh"}, {"Quit", "quit"},
 }
 
 func (m Model) drawPage(sc *scene) {
@@ -377,9 +379,10 @@ func fact(p skin.Palette, k, v string) string {
 func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	title := as.agent.Title
 	d := detailView{label: "Agent · " + title}
-	path, _ := claude.SettingsPath()
-	if as.agent.Name == codex.Name {
-		path, _ = codex.ConfigPath()
+	path := configPath(as.agent.Name)
+	tuneBtn := button{"Tune", "tune:" + as.agent.Name, false}
+	if len(tune.Items(as.agent.Name)) == 0 {
+		tuneBtn = button{}
 	}
 	switch {
 	case as.err != nil:
@@ -388,14 +391,14 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	case as.status.Route == agent.Local:
 		d.heading = "Uses its own login"
 		d.body = "Requests use the account " + title + " is logged in with."
-		d.buttons = [3]button{{"Switch route", "switch:" + as.agent.Name, true}, {}, {"Tune", "tune:" + as.agent.Name, false}}
+		d.buttons = [3]button{{"Switch route", "switch:" + as.agent.Name, true}, {}, tuneBtn}
 	default:
 		d.heading = "Routed through " + as.status.Route
 		d.body = "Requests use the accounts logged in on " + as.status.Route + "."
 		d.buttons = [3]button{
 			{"Switch route", "switch:" + as.agent.Name, true},
 			{"Own login", "local:" + as.agent.Name, false},
-			{"Tune", "tune:" + as.agent.Name, false},
+			tuneBtn,
 		}
 	}
 	if as.status.Model != "" {
@@ -406,6 +409,22 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 		d.facts[2] = skin.Fg(p.Amber).Render("! " + as.status.Notes[0])
 	}
 	return d
+}
+
+// configPath is the file that holds an agent's route.
+func configPath(agentName string) string {
+	var path string
+	switch agentName {
+	case claude.Name:
+		path, _ = claude.SettingsPath()
+	case codex.Name:
+		path, _ = codex.ConfigPath()
+	case opencode.Name:
+		path, _ = opencode.ConfigPath()
+	case pi.Name:
+		path, _ = pi.ModelsPath()
+	}
+	return path
 }
 
 func (m Model) proxyDetail(p skin.Palette, name string) detailView {

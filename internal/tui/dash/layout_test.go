@@ -335,7 +335,7 @@ func TestMultilineTextStaysOneRow(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = multi, true
 		down := send(t, m, probedMsg{name: "spark", probe: app.Probe{HealthErr: errors.New(multi)}})
-		down.focus = 4 // spark
+		down.focus = idx(down, "proxy:spark")
 		form, _ := m.openAdd()
 		withErr := send(t, form.(Model), savedMsg{name: "x", err: errors.New(multi)})
 		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}})

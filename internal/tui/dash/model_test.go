@@ -2,6 +2,7 @@ package dash
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -227,4 +228,13 @@ func TestTuneDialog(t *testing.T) {
 	if m = send(t, m, click("m:tune-reset")); m.busy != "Planning" {
 		t.Fatal("reset should plan")
 	}
+}
+
+// idx is the focus index of a sidebar id.
+func idx(m Model, id string) int {
+	i := slices.Index(m.homeIDs(), id)
+	if i < 0 {
+		panic("no sidebar item " + id)
+	}
+	return i
 }

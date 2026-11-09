@@ -30,8 +30,8 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agentctl",
 		Short: "Switch coding agents between their own login and CLIProxyAPI servers",
-		Long: "agentctl routes Claude Code and Codex either to their own login or to a CLIProxyAPI server,\n" +
-			"by editing the agents' own config files. Claude models are only ever offered to Claude Code.",
+		Long: "agentctl routes Claude Code, Codex, OpenCode and Pi either to their own login or to a CLIProxyAPI\n" +
+			"server, by editing the agents' own config files. Claude models only ever run through Claude Code.",
 		Example: `  agentctl proxy add spark --url https://spark.example.ts.net:8445
   agentctl proxy test
   agentctl use codex spark

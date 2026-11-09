@@ -259,7 +259,7 @@ func newProxyAllowCmd() *cobra.Command {
 				return err
 			}
 			u.ok(fmt.Sprintf("%s allow list: %s", args[0], strings.Join(p.AllowModels, ", ")))
-			u.println(u.s.Subtle.Render("Re-run `agentctl use codex " + args[0] + "` to refresh Codex's model list."))
+			u.println(u.s.Subtle.Render("Run `agentctl refresh` to update the model lists of agents routed to " + args[0] + "."))
 			return nil
 		},
 	}

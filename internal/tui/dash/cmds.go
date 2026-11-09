@@ -98,7 +98,7 @@ func plan(ctx context.Context, cfg *config.Config, st *config.State, req app.Req
 
 func refresh(ctx context.Context, cfg *config.Config, st *config.State) tea.Cmd {
 	return func() tea.Msg {
-		p, err := app.RefreshCodex(ctx, cfg, st)
+		p, err := app.Refresh(ctx, cfg, st)
 		return plannedMsg{plan: p, err: err, refresh: true}
 	}
 }

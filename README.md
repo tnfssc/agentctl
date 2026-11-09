@@ -2,12 +2,17 @@
 
 Switch coding agents between their own login and [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) servers.
 
-- `local` uses whatever Claude Code or Codex is already logged in with. Nothing is copied.
-- A proxy uses the accounts logged in on that proxy.
-- Claude models are only ever offered to Claude Code. Codex gets a model list without them.
+Works with Claude Code, Codex, [OpenCode](https://opencode.ai) (v2) and [Pi](https://pi.dev).
 
-agentctl edits the agents' own config files (`~/.claude/settings.json`, `~/.codex/config.toml`), shows a diff first,
-keeps a backup of every write, and going back to `local` restores the files exactly.
+- `local` uses whatever the agent is already logged in with. Nothing is copied.
+- A proxy uses the accounts logged in on that proxy.
+- Claude models only ever run through Claude Code. Codex, OpenCode and Pi get model lists without them; OpenCode
+  reaches the proxy's Claude models through its claude-agent provider, which runs your Claude Code.
+
+agentctl edits the agents' own config files (`~/.claude/settings.json`, `~/.codex/config.toml`,
+`~/.config/opencode/opencode.json`, `~/.pi/agent/models.json`), shows a diff first, keeps a backup of every write, and
+going back to `local` restores the files exactly. Keys stay out of them: agents ask `agentctl token` for one, except
+OpenCode, which can't run a command and reads a private copy in `~/.config/agentctl/keys/`.
 
 ## Install
 
@@ -36,7 +41,7 @@ go install github.com/tnfssc/agentctl/cmd/agentctl@latest
 ## Use
 
 Run `agentctl` in a terminal for the dashboard showing where each agent is routed and which proxies work.
-Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh Codex's model list.
+Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh model lists.
 
 The same things from the command line:
 
@@ -46,8 +51,10 @@ agentctl proxy test                  # health, key, models, and what Claude Code
 agentctl proxy models spark          # which models each agent may use
 
 agentctl use codex spark --model gpt-6.1-sol
+agentctl use opencode spark          # also points OpenCode's claude-agent at spark
+agentctl use pi spark
 agentctl use claude local
-agentctl refresh                     # rebuild Codex's model list after the proxy's models change
+agentctl refresh                     # rebuild model lists after the proxy's models change
 agentctl status
 ```
 
@@ -59,12 +66,13 @@ privacy without losing features, and an opt-in "never ask for approval". `agentc
 the dashboard) adds curated sections to your shared `~/.agents/AGENTS.md`, which Claude Code reads too; your own text
 there is never touched. Unticking an item, or "Reset to default", puts the defaults back. You review a diff before anything is written.
 
-Models agentctl cannot prove are non-Anthropic are hidden from Codex. Clear one you trust with
-`agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude Code picks up new
-proxy models on its own at startup; Codex needs `agentctl refresh`.
+Models agentctl cannot prove are non-Anthropic, and image or audio models, are hidden from Codex, OpenCode and Pi.
+Clear one you trust with `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude
+Code picks up new proxy models on its own at startup; the others need `agentctl refresh`.
 
-Routing Claude Code through a proxy asks for a one-time acknowledgement: Anthropic's terms forbid proxies that serve
-Claude subscription logins, and accounts on them can be banned.
+Routing Claude Code or OpenCode through a proxy asks for a one-time acknowledgement: Anthropic's terms forbid proxies
+that serve Claude subscription logins, and accounts on them can be banned. OpenCode's claude-agent needs turning on once
+with `opencode auth login claude-agent`.
 
 ### T3 Code
 

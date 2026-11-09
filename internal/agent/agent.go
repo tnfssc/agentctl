@@ -21,7 +21,8 @@ import (
 // Local is the route name for an agent's own login.
 const Local = "local"
 
-// Change is one file rewrite. Before is nil when the file does not exist.
+// Change is one file rewrite. Before is nil when the file does not exist;
+// After is nil when the change removes it.
 type Change struct {
 	Path   string
 	Before []byte
@@ -31,9 +32,14 @@ type Change struct {
 	// Link, when set, makes Path a symlink to Link instead of writing it.
 	// Path must not exist yet.
 	Link string
+	// Agent, when set, files the backup under that agent instead of the
+	// plan's, for plans that touch several agents.
+	Agent string
 }
 
-func (c Change) noop() bool { return c.Link == "" && bytes.Equal(c.Before, c.After) }
+func (c Change) noop() bool {
+	return c.Link == "" && bytes.Equal(c.Before, c.After) && (c.Before == nil) == (c.After == nil)
+}
 
 // Plan is everything one `use` would do to an agent, shown before applying.
 type Plan struct {
@@ -64,6 +70,10 @@ func (p Plan) Diff() string {
 			fmt.Fprintf(&b, "link %s -> %s\n", c.Path, c.Link)
 			continue
 		}
+		if c.After == nil {
+			fmt.Fprintf(&b, "remove %s\n", c.Path)
+			continue
+		}
 		if c.Quiet {
 			fmt.Fprintf(&b, "write %s (generated, %d bytes)\n", c.Path, len(c.After))
 			continue
@@ -89,9 +99,19 @@ func (p Plan) Apply() error {
 			continue
 		}
 		if c.Before != nil {
-			if err := backup(p.Agent, c.Path, c.Before); err != nil {
+			owner := p.Agent
+			if c.Agent != "" {
+				owner = c.Agent
+			}
+			if err := backup(owner, c.Path, c.Before); err != nil {
 				return fmt.Errorf("backup %s: %w", c.Path, err)
 			}
+		}
+		if c.After == nil {
+			if err := os.Remove(c.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
 		}
 		perm := c.Perm
 		if perm == 0 {

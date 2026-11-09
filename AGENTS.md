@@ -1,17 +1,20 @@
 # agentctl
 
-Go CLI that routes Claude Code and Codex to their own login or to CLIProxyAPI servers, and runs T3 Code on the same
-machine. Module
-`github.com/tnfssc/agentctl`, binary `agentctl`. Decisions and research live in `.agents/notes/`; read the notes for a
-feature before changing it.
+Go CLI that routes Claude Code, Codex, OpenCode (v2) and Pi to their own login or to CLIProxyAPI servers, and runs
+T3 Code on the same machine. Module `github.com/tnfssc/agentctl`, binary `agentctl`. Decisions and research live in
+`.agents/notes/`; read the notes for a feature before changing it.
 
 ## Rules that are product decisions
 
-- Claude models are only ever offered to Claude Code. Model classification fails safe: unknown counts as Anthropic.
+- Claude models only ever run through Claude Code: other agents' model lists leave them out, and OpenCode reaches them
+  only through claude-agent, which runs the real `claude`. Model classification fails safe: unknown counts as Anthropic.
 - Agent configs are edited surgically and must round-trip: proxy then local restores the file byte-for-byte. Keys never
-  go into agent configs; agents call `agentctl token <proxy>`.
-- Never write to a user's real `~/.claude` or `~/.codex` while developing; use `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
-  `XDG_CONFIG_HOME` pointing into `.tmp/` (tests do this via `internal/testutil`).
+  go into agent configs; agents call `agentctl token <proxy>`. OpenCode can't run a command, so its config points at a
+  0600 copy in agentctl's own `keys/` directory.
+- Never write to a user's real `~/.claude`, `~/.codex`, `~/.config/opencode` or `~/.pi` while developing; use
+  `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`/`XDG_DATA_HOME` and `PI_CODING_AGENT_DIR` pointing into `.tmp/`
+  (tests do this via `internal/testutil`). OpenCode and Pi configs are JSONC: edit them with `internal/jsonc`, never
+  gjson/sjson, which match keys inside comments.
 - T3 Code is managed only through the upstream `t3` CLI and the state it writes (`internal/t3`); agentctl never writes
   T3's units, plists or `service.env`. Never run `t3` or agentctl's T3 commands against the real `~/.t3` while
   developing: they install launchd/systemd services and migrate its database. Set `T3CODE_HOME` into `.tmp/` (tests

@@ -86,7 +86,7 @@ func TestSwitchingEndToEnd(t *testing.T) {
 	}
 	must(t, "use", "codex", "local", "--yes")
 	must(t, "use", "claude", "local", "--yes")
-	if out := must(t, "status"); strings.Count(out, "own login") != 2 {
+	if out := must(t, "status"); strings.Count(out, "own login") != 4 {
 		t.Fatalf("status after local:\n%s", out)
 	}
 	must(t, "proxy", "rm", "spark")

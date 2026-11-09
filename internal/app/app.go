@@ -11,6 +11,8 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/agent/codex"
+	"github.com/tnfssc/agentctl/internal/agent/opencode"
+	"github.com/tnfssc/agentctl/internal/agent/pi"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/models"
 	"github.com/tnfssc/agentctl/internal/proxy"
@@ -36,6 +38,14 @@ var Agents = []Agent{
 	}},
 	{codex.Name, "Codex", func(cfg *config.Config) (Status, error) {
 		s, err := codex.Current(cfg)
+		return Status(s), err
+	}},
+	{opencode.Name, "OpenCode", func(cfg *config.Config) (Status, error) {
+		s, err := opencode.Current(cfg)
+		return Status(s), err
+	}},
+	{pi.Name, "Pi", func(cfg *config.Config) (Status, error) {
+		s, err := pi.Current(cfg)
 		return Status(s), err
 	}},
 }
@@ -67,10 +77,29 @@ type Request struct {
 	Agent, Route, Model string
 }
 
+// sendsClaudeToProxy reports whether a route puts Claude Code in front of a
+// proxy: Claude Code itself, or OpenCode, whose claude-agent runs it.
+func sendsClaudeToProxy(agentName, route string) bool {
+	return (agentName == claude.Name || agentName == opencode.Name) && route != agent.Local && route != ""
+}
+
 // NeedsClaudeAck reports whether the request routes Claude Code through a
 // proxy before the user has accepted claude.PolicyWarning.
 func NeedsClaudeAck(st *config.State, r Request) bool {
-	return r.Agent == claude.Name && r.Route != agent.Local && !st.ClaudeProxyAcknowledged
+	return sendsClaudeToProxy(r.Agent, r.Route) && !st.ClaudeProxyAcknowledged
+}
+
+// UsableModels is what agents other than Claude Code may list from a proxy:
+// models proven not to be Anthropic's that a coding agent can talk to.
+func UsableModels(list []proxy.Model, allow []string) (usable []proxy.Model, hidden []string) {
+	for _, pm := range list {
+		if models.Usable(models.Classify(pm.ID, pm.OwnedBy, allow)) && models.Chat(pm.ID) {
+			usable = append(usable, pm)
+		} else {
+			hidden = append(hidden, pm.ID)
+		}
+	}
+	return usable, hidden
 }
 
 // Plan prepares a route change without writing anything. It may record
@@ -112,6 +141,32 @@ func Plan(ctx context.Context, cfg *config.Config, st *config.State, r Request) 
 			}
 		}
 		return codex.PlanUse(cfg, st, r.Route, r.Model, cat)
+	case pi.Name, opencode.Name:
+		var usable []proxy.Model
+		if r.Route != agent.Local {
+			if r.Model != "" && models.Classify(r.Model, "", nil) == models.Anthropic {
+				return agent.Plan{}, fmt.Errorf("%q is a Claude model; Claude models are only allowed in Claude Code", r.Model)
+			}
+			list, err := FetchModels(ctx, p)
+			if err != nil {
+				return agent.Plan{}, fmt.Errorf("%s: %w", r.Route, err)
+			}
+			usable, _ = UsableModels(list, p.AllowModels)
+		}
+		if r.Agent == pi.Name {
+			if r.Route != agent.Local {
+				if err := pi.RememberLocal(st); err != nil {
+					return agent.Plan{}, err
+				}
+			}
+			return pi.PlanUse(cfg, st, r.Route, r.Model, pi.BuildModels(usable))
+		}
+		if r.Route != agent.Local {
+			if err := opencode.RememberLocal(st); err != nil {
+				return agent.Plan{}, err
+			}
+		}
+		return opencode.PlanUse(ctx, cfg, st, r.Route, r.Model, usable)
 	default:
 		_, err := FindAgent(r.Agent)
 		return agent.Plan{}, err
@@ -124,27 +179,53 @@ func Apply(plan agent.Plan, st *config.State) error {
 	if err := plan.Apply(); err != nil {
 		return err
 	}
-	if plan.Agent == claude.Name && plan.Route != agent.Local && plan.Route != "" {
+	if sendsClaudeToProxy(plan.Agent, plan.Route) {
 		st.ClaudeProxyAcknowledged = true
 	}
 	return st.Save()
 }
 
-// ErrNothingToRefresh means Codex is not routed through an agentctl proxy.
-var ErrNothingToRefresh = errors.New("codex is not routed through a proxy; nothing to refresh")
+// ErrNothingToRefresh means no agent with a model list is routed through a
+// proxy.
+var ErrNothingToRefresh = errors.New("no agent is routed through a proxy; nothing to refresh")
 
-// RefreshCodex rebuilds Codex's model list from its current proxy, keeping
-// the current model if the proxy still serves it.
-func RefreshCodex(ctx context.Context, cfg *config.Config, st *config.State) (agent.Plan, error) {
-	s, err := codex.Current(cfg)
-	if err != nil {
-		return agent.Plan{}, err
+// ModelLists names the plan Refresh returns.
+const ModelLists = "model lists"
+
+// Refresh rebuilds the model list of every agent routed through a proxy
+// (Codex, OpenCode and Pi; Claude Code asks the proxy itself), keeping each
+// agent's model when the proxy still serves it. OpenCode's key copy is
+// rewritten too. The result is one plan, reviewed at once.
+func Refresh(ctx context.Context, cfg *config.Config, st *config.State) (agent.Plan, error) {
+	merged := agent.Plan{Agent: ModelLists}
+	for _, name := range []string{codex.Name, opencode.Name, pi.Name} {
+		a, err := FindAgent(name)
+		if err != nil {
+			return agent.Plan{}, err
+		}
+		s, err := a.Status(cfg)
+		if err != nil {
+			return agent.Plan{}, fmt.Errorf("%s: %w", a.Title, err)
+		}
+		if s.Route == agent.Local || s.Route == "custom" {
+			continue
+		}
+		p, err := Plan(ctx, cfg, st, Request{Agent: name, Route: s.Route})
+		if err != nil {
+			return agent.Plan{}, fmt.Errorf("%s: %w", a.Title, err)
+		}
+		for _, c := range p.Changes {
+			c.Agent = name
+			merged.Changes = append(merged.Changes, c)
+		}
+		for _, w := range p.Warnings {
+			merged.Warnings = append(merged.Warnings, a.Title+": "+w)
+		}
 	}
-	if s.Route == agent.Local || s.Route == "custom" {
+	if merged.Changes == nil {
 		return agent.Plan{}, ErrNothingToRefresh
 	}
-	plan, err := Plan(ctx, cfg, st, Request{Agent: codex.Name, Route: s.Route})
-	return plan, err
+	return merged, nil
 }
 
 // FetchModels lists the models a proxy's key can reach.
