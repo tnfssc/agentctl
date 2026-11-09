@@ -287,9 +287,11 @@ func report(u *ui, name string, p config.Proxy, r app.Probe) {
 		u.warn(fmt.Sprintf("the proxy took %s to list models; Claude Code gives up after 3s and shows only built-in models",
 			r.DiscoveryLatency.Round(time.Millisecond)))
 	case len(r.Disguised) > 0:
-		u.warn(fmt.Sprintf("Claude Code will see %d non-Claude models under disguised names (e.g. %s). "+
-			"Set disable-cloaking-model-list on the proxy to show real names.", len(r.Disguised), r.Disguised[0]))
+		u.ok(fmt.Sprintf("Claude Code's /model lists the %d non-Claude models as claude-fable-5-dd-<name reversed> (e.g. %s)",
+			len(r.Disguised), r.Disguised[0]))
+	case r.Counts.Other+r.Counts.Unknown > 0:
+		u.ok("Claude Code's /model lists only the Claude models; it drops ids that don't start with claude")
 	default:
-		u.ok("Claude Code will see the proxy's models under their real names")
+		u.ok("Claude Code's /model lists the proxy's models")
 	}
 }

@@ -451,7 +451,7 @@ func (m Model) proxyDetail(p skin.Palette, name string) detailView {
 		d.heading = fmt.Sprintf("Live · %d models", len(r.Models))
 		d.facts[2] = fact(p, "latency", r.Latency.Round(time.Millisecond).String())
 		d.facts[3] = fact(p, "models", fmt.Sprintf("%d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
-		if len(r.Disguised) > 0 || r.DiscoveryErr != nil || r.SlowDiscovery() {
+		if r.DiscoveryErr != nil || r.SlowDiscovery() {
 			d.facts[4] = skin.Fg(p.Amber).Render("! Claude Code may not list this proxy's models well; see Details")
 		}
 	}
@@ -769,9 +769,11 @@ func (m Model) proxyReport(name string) string {
 		case r.SlowDiscovery():
 			lines[3] = warn.Render("! listing models takes over 3s; Claude Code will show only its built-in models")
 		case len(r.Disguised) > 0:
-			lines[3] = warn.Render(fmt.Sprintf("! Claude Code sees %d models under disguised names; set disable-cloaking-model-list", len(r.Disguised)))
+			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render(fmt.Sprintf("Claude Code lists %d other models as claude-fable-5-dd-<name reversed>", len(r.Disguised)))
+		case r.Counts.Other+r.Counts.Unknown > 0:
+			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code lists only the Claude models; it drops other ids")
 		default:
-			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code sees the proxy's models under their real names")
+			lines[3] = ok.Render("✓ ") + skin.Fg(p.Muted).Render("Claude Code lists the proxy's models")
 		}
 		lines[5] = p.Label(fmt.Sprintf("Models · %d Claude · %d all agents · %d unverified", r.Counts.Claude, r.Counts.Other, r.Counts.Unknown))
 	}

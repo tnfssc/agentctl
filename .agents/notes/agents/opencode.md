@@ -22,7 +22,8 @@ models and claude-agent on the same proxy; the key comes from a 0600 file; defau
   to `ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN`. It only activates after `opencode auth login claude-agent --method
   claude-login` (records an "external" credential; the login itself is Claude Code's). Its model list comes from a
   probe of `claude`; with an empty Claude config only the aliases (opus/sonnet/haiku/fable) appear; a cloaking proxy
-  adds disguised `claude-fable-5-dd-*` entries (set disable-cloaking-model-list on the proxy).
+  adds disguised `claude-fable-5-dd-*` entries: the proxy's other models, usable through Claude Code (keep cloaking;
+  see switching/claude-code-discovery).
 - Verified 2026-11-09 with OpenCode 2.2.6 against minipc: GPT over Responses, Palmyra over chat completions, and
   claude-agent/haiku through Claude Code, all from agentctl-written config.
 - v2 runs a background server (`opencode service`); scripts should pass `--standalone` or stop it afterwards.
