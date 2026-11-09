@@ -2,6 +2,7 @@ package dash
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"strconv"
 	"strings"
@@ -30,9 +31,8 @@ const (
 	minHeight = 20 // shorter is the compact layout
 	logoRows  = 24 // from this height the header has the three-row logo
 
-	navTop     = 1 // nav row band: rows 1-3
-	pageTop    = 5 // first row under the nav hairline
-	pillWidth  = 30
+	navTop     = 1  // nav row band: rows 1-3
+	pageTop    = 5  // first row under the nav hairline
 	homeSlotW  = 15 // detail-pane button slot
 	dialogSlot = 18 // dialog button slot
 	bodyLines  = 3  // detail-pane description rows
@@ -86,7 +86,12 @@ func (m Model) View() tea.View {
 	// Hover needs every pointer movement; over SSH that floods the link, so
 	// remote sessions get clicks and the wheel only.
 	v.MouseMode = tea.MouseModeAllMotion
-	if m.remote {
+	switch {
+	case m.dialog == pairDialog:
+		// The terminal keeps the mouse, so the link can be selected and
+		// copied; the dialog's keys still work.
+		v.MouseMode = tea.MouseModeNone
+	case m.remote:
 		v.MouseMode = tea.MouseModeCellMotion
 	}
 	v.WindowTitle = "agentctl"
@@ -128,10 +133,6 @@ func (m Model) sidebarWidth() int {
 	return 28
 }
 
-var navLinks = []struct{ label, id string }{
-	{"Add proxy", "add"}, {"Test proxies", "testall"}, {"Refresh models", "refresh"}, {"Quit", "quit"},
-}
-
 func (m Model) drawPage(sc *scene) {
 	p := m.pal
 	if m.dialog != noDialog {
@@ -149,26 +150,13 @@ func (m Model) drawPage(sc *scene) {
 		return
 	}
 
-	// Nav: logo, text links, status pill; a short terminal gets a one-line
-	// header with the wordmark and no pill.
-	linkY, x := navTop+1, 2+skin.LogoWidth+4
+	// Header: the logo alone; actions live on the items they act on, and
+	// state in the sidebar's dots. A short terminal gets the one-line
+	// wordmark.
 	if m.shortHeader() {
 		sc.add(p.Wordmark(), 2, 0, 1, "")
-		linkY, x = 0, 2+8+4
 	} else {
 		sc.add(p.Logo(), 2, navTop, 1, "")
-	}
-	for _, l := range navLinks {
-		style := skin.Fg(p.Muted)
-		if m.hover == l.id {
-			style = skin.Fg(p.Text).Underline(true)
-		}
-		sc.add(style.Render(l.label), x, linkY, 1, l.id)
-		x += lipgloss.Width(l.label) + 3
-	}
-	// The pill shows whenever the terminal is big enough, whatever it says.
-	if px := w - pillWidth - 2; px >= x && !m.shortHeader() {
-		sc.add(m.pill(p), px, navTop, 1, "pill")
 	}
 	top := m.contentTop()
 	sc.add(p.HLine(w), 0, top-1, 1, "")
@@ -222,7 +210,7 @@ var hintTexts = map[dialog]string{
 	askDialog:      "y yes · n no",
 	devicesDialog:  "p pair · r revoke · i idle · esc",
 	pairFormDialog: "tab next · enter submit · esc",
-	pairDialog:     "c copy · enter done",
+	pairDialog:     "select the link · c copy · enter done",
 	serviceDialog:  "↑↓ · enter choose · esc back",
 	signingDialog:  "c copy · enter done",
 }
@@ -247,51 +235,16 @@ func (m Model) hints() string {
 	return hintTexts[m.dialog]
 }
 
-// pill summarizes proxy health like the site's "prod server / running".
-func (m Model) pill(p skin.Palette) string {
-	if !m.loaded {
-		return p.Pill(p.Amber, "agentctl", "loading", pillWidth)
-	}
-	total := len(m.cfg.Proxies)
-	if total == 0 {
-		return p.Pill(p.Dim, "proxies", "none yet", pillWidth)
-	}
-	live, checking := 0, 0
-	for _, n := range m.cfg.Names() {
-		r, ok := m.probes[n]
-		switch {
-		case !ok:
-			checking++
-		case r.Err() == nil:
-			live++
-		}
-	}
-	noun := "proxies"
-	if total == 1 {
-		noun = "proxy"
-	}
-	switch {
-	case checking > 0:
-		return p.Pill(p.Amber, fmt.Sprintf("%d %s", total, noun), "checking", pillWidth)
-	case live == total:
-		return p.Pill(p.Green, fmt.Sprintf("%d %s", total, noun), "live", pillWidth)
-	case live == 0:
-		return p.Pill(p.Red, fmt.Sprintf("%d %s", total, noun), "down", pillWidth)
-	default:
-		return p.Pill(p.Amber, fmt.Sprintf("%d/%d %s", live, total, noun), "live", pillWidth)
-	}
-}
-
-// proxyDot is a colored status dot for a proxy.
-func (m Model) proxyDot(p skin.Palette, name string) string {
+// proxyDot is the color of a proxy's status dot.
+func (m Model) proxyDot(p skin.Palette, name string) color.Color {
 	r, ok := m.probes[name]
 	switch {
 	case !ok:
-		return skin.Fg(p.Amber).Render("●")
+		return p.Amber
 	case r.Err() != nil:
-		return skin.Fg(p.Red).Render("●")
+		return p.Red
 	default:
-		return skin.Fg(p.Green).Render("●")
+		return p.Green
 	}
 }
 
@@ -340,6 +293,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.proxyDetail(p, name)
 	case "t3":
 		return m.t3Detail(p)
+	case "opencode":
+		return m.ocDetail(p)
 	case "git":
 		return m.gitDetail(p)
 	case "behavior":
@@ -420,7 +375,7 @@ func (m Model) proxyDetail(p skin.Palette, name string) detailView {
 	d := detailView{
 		label:   "Proxy · " + name,
 		body:    "Agents routed here use the accounts logged in on this server.",
-		buttons: [3]button{{"Test", "test:" + name, true}, {"Details", "details:" + name, false}, {"Remove", "rm:" + name, false}},
+		buttons: [3]button{{"Test", "test:" + name, true}, {"Refresh models", "refresh", false}, {"Remove", "rm:" + name, false}},
 	}
 	d.facts[0] = fact(p, "url", m.cfg.Proxies[name].URL)
 	if who := m.usedBy(name); who != "" {
@@ -656,7 +611,7 @@ func (m Model) drawDialog(sc *scene) {
 	case addDialog:
 		m.drawAddForm(sc)
 	case askDialog:
-		m.panel(sc, "T3 Code", m.ask.heading, nil, cancel, &button{m.ask.button, "m:yes", true})
+		m.panel(sc, m.ask.title, m.ask.heading, nil, cancel, &button{m.ask.button, "m:yes", true})
 		text(skin.Clip(m.ask.body, b.W, b.H))
 	case devicesDialog:
 		m.drawDevices(sc)
@@ -667,8 +622,13 @@ func (m Model) drawDialog(sc *scene) {
 	case signingDialog:
 		m.drawSigning(sc)
 	case serviceDialog:
-		m.panel(sc, "T3 Code · service", "Background service", nil, cancel, nil)
-		text([]string{skin.Fg(p.Muted).Render("Runs T3 Code at boot under systemd or launchd; data in " + tildePath(m.t3.Home) + ".")})
+		if m.svc == svcOpenCode {
+			m.panel(sc, "OpenCode web · server", "Background server", nil, cancel, nil)
+			text([]string{skin.Fg(p.Muted).Render("Started on demand by opencode, not at boot; it serves the web app and the TUI.")})
+		} else {
+			m.panel(sc, "T3 Code · service", "Background service", nil, cancel, nil)
+			text([]string{skin.Fg(p.Muted).Render("Runs T3 Code at boot under systemd or launchd; data in " + tildePath(m.t3.Home) + ".")})
+		}
 		m.drawOptions(sc, b.X, b.Y+2, m.listRows())
 	}
 }

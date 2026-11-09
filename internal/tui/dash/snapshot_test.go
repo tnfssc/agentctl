@@ -61,9 +61,14 @@ func TestSnapshots(t *testing.T) {
 	frames["t3-devices"] = devices
 	pairForm, _ := devices.openPairForm()
 	frames["t3-pair-form"] = pairForm.(Model)
-	frames["t3-pairing"] = send(t, withT3, t3PairedMsg{pairing: t3.Pairing{
+	frames["t3-pairing"] = send(t, withT3, pairedMsg{pairing: t3.Pairing{
 		URL: "https://minipc.tail035df.ts.net/pair#token=P3BRPMVCDGYE", Expires: time.Now().Add(5 * time.Minute),
 	}})
+
+	withOC := send(t, m, ocStates()["serving old"])
+	withOC.focus = idx(withOC, "opencode")
+	frames["opencode"] = withOC
+	frames["opencode-server"] = send(t, withOC, click("oc-server"))
 
 	for name, f := range frames {
 		out := f.View().Content

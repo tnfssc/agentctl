@@ -33,12 +33,20 @@ type Proxy struct {
 
 // Config is the file at Path().
 type Config struct {
-	Proxies map[string]Proxy `toml:"proxies"`
-	T3      T3               `toml:"t3,omitempty"`
+	Proxies  map[string]Proxy `toml:"proxies"`
+	T3       T3               `toml:"t3,omitempty"`
+	OpenCode OpenCode         `toml:"opencode,omitempty"`
 }
 
 // T3 holds agentctl's settings for the T3 Code server on this machine.
 type T3 struct {
+	// URL is where other devices reach the server, used in pairing links.
+	// Empty means the address the server listens on.
+	URL string `toml:"url,omitempty"`
+}
+
+// OpenCode holds agentctl's settings for OpenCode's server on this machine.
+type OpenCode struct {
 	// URL is where other devices reach the server, used in pairing links.
 	// Empty means the address the server listens on.
 	URL string `toml:"url,omitempty"`

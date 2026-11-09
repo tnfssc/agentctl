@@ -245,7 +245,6 @@ func PlanUse(ctx context.Context, cfg *config.Config, st *config.State, route, c
 	if p.KeyCmd != "" {
 		plan.Warnings = append(plan.Warnings, "OpenCode reads a copy of the key; run `agentctl refresh` after it changes")
 	}
-	plan.Warnings = append(plan.Warnings, "Claude models come through claude-agent; turn it on once with `opencode auth login claude-agent`")
 	return plan, nil
 }
 

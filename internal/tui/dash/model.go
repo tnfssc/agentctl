@@ -20,9 +20,11 @@ import (
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/agent/claude"
+	"github.com/tnfssc/agentctl/internal/agent/opencode"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/guide"
+	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/t3"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
@@ -47,7 +49,7 @@ const (
 	devicesDialog         // T3 Code's sessions and pairing links
 	pairFormDialog        // name and address for a new pairing link
 	pairDialog            // the new pairing link and its QR code
-	serviceDialog         // restart, repair or uninstall T3 Code's service
+	serviceDialog         // T3 Code's service or OpenCode's server menu
 	signingDialog         // how to set up commit signing with an agent
 )
 
@@ -141,6 +143,11 @@ type Model struct {
 	pairing    t3.Pairing
 	qr         []string
 
+	oc       ocweb.Status
+	ocErr    error
+	ocLoaded bool
+	svc      string // whose ask, service and pairing dialogs are open: svcT3 or svcOpenCode
+
 	inputs  []textinput.Model
 	field   int    // focused input in addDialog and pairFormDialog
 	formErr string // last failed check, shown in the form
@@ -168,7 +175,7 @@ func (m *Model) setPalette(isDark bool) {
 
 // Init loads config and asks for the background color.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, load, inspectT3(m.ctx))
+	return tea.Batch(tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx))
 }
 
 // needsFrames reports whether anything on screen is animating.
@@ -251,7 +258,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.plan.Route == "" {
 			return m.close(title(msg.plan.Agent)+" settings updated. Restart running sessions to pick them up.", false), load
 		}
+		if msg.claude != "" {
+			return m.close(msg.claude, msg.claudeErr), load
+		}
 		return m.close(fmt.Sprintf("%s now uses %s. Restart running sessions to pick it up.", title(msg.plan.Agent), describe(msg.plan.Route)), false), load
+	case claudeMsg:
+		m.busy = ""
+		return m.close(msg.toast, msg.err), nil
 	case tuneLoadedMsg:
 		m.busy = ""
 		if msg.err != nil {
@@ -280,8 +293,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.close(msg.err.Error(), true), load
 		}
 		return m.close("Removed "+msg.name, false), load
-	case t3LoadedMsg, t3AccessMsg, t3DoneMsg, t3PairedMsg:
+	case t3LoadedMsg, t3AccessMsg, t3DoneMsg, pairedMsg:
 		return m.onT3(msg)
+	case ocLoadedMsg, ocDoneMsg:
+		return m.onOC(msg)
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -330,7 +345,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
-	ids = append(ids, "t3", "behavior", "git")
+	ids = append(ids, "t3", "opencode", "behavior", "git")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -416,8 +431,17 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "opencode":
+		for _, b := range m.ocDetail(m.pal).buttons {
+			if b.primary {
+				return m.act(b.id)
+			}
+		}
+		return m, nil
 	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices", "t3-service", "t3-uninstall":
 		return m.actT3(verb)
+	case "oc-start", "oc-restart", "oc-update", "oc-remote", "oc-signout", "oc-stop", "oc-server", "oc-pair":
+		return m.actOC(verb)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
 	case "proxy", "details":
@@ -435,8 +459,6 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m, refresh(m.ctx, m.cfg, m.st)
 	case "testall":
 		return m, m.probeAll()
-	case "quit":
-		return m, tea.Quit
 	case "m":
 		return m.actDialog(arg)
 	}
@@ -447,13 +469,13 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
 	case "close-btn":
-		if m.dialog == pairDialog { // back to the list, which now shows the link
+		if m.dialog == pairDialog && m.svc != svcOpenCode { // back to the list, which now shows the link
 			m.busy = "Loading devices"
 			return m, listAccess(m.ctx)
 		}
 		return m.close("", false), nil
 	case "close", "cancel":
-		if (m.dialog == askDialog && m.ask.reopen) || m.dialog == pairFormDialog {
+		if (m.dialog == askDialog && m.ask.reopen) || (m.dialog == pairFormDialog && m.svc != svcOpenCode) {
 			m.dialog = devicesDialog
 			return m, nil
 		}
@@ -500,7 +522,7 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
 	case "apply":
 		m.busy = "Applying"
-		return m, apply(m.plan, m.st)
+		return m, apply(m.ctx, m.plan, m.st)
 	case "test":
 		m.setProbe(m.proxy, nil)
 		m.refreshReport(m.proxyReport(m.proxy))
@@ -798,7 +820,12 @@ func (m Model) onPlanned(msg plannedMsg) (tea.Model, tea.Cmd) {
 	case msg.plan.Empty() && msg.plan.Route == "":
 		return m.close(title(msg.plan.Agent)+" settings already match; nothing to change", false), nil
 	case msg.plan.Empty():
-		return m.close(fmt.Sprintf("%s already uses %s; nothing to change", title(msg.plan.Agent), describe(msg.plan.Route)), false), nil
+		done := fmt.Sprintf("%s already uses %s; nothing to change", title(msg.plan.Agent), describe(msg.plan.Route))
+		if msg.plan.Agent == opencode.Name {
+			m.busy = "Checking OpenCode's claude-agent"
+			return m, connectClaudeCmd(m.ctx, msg.plan, done)
+		}
+		return m.close(done, false), nil
 	}
 	m.plan = msg.plan
 	m.dialog = confirmDialog

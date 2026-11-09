@@ -1,8 +1,8 @@
 # agentctl
 
 Go CLI that routes Claude Code, Codex, OpenCode (v2) and Pi to their own login or to CLIProxyAPI servers, and runs
-T3 Code on the same machine. Module `github.com/tnfssc/agentctl`, binary `agentctl`. Decisions and research live in
-`.agents/notes/`; read the notes for a feature before changing it.
+T3 Code and OpenCode's web server on the same machine. Module `github.com/tnfssc/agentctl`, binary `agentctl`.
+Decisions and research live in `.agents/notes/`; read the notes for a feature before changing it.
 
 ## Rules that are product decisions
 
@@ -19,6 +19,10 @@ T3 Code on the same machine. Module `github.com/tnfssc/agentctl`, binary `agentc
   T3's units, plists or `service.env`. Never run `t3` or agentctl's T3 commands against the real `~/.t3` while
   developing: they install launchd/systemd services and migrate its database. Set `T3CODE_HOME` into `.tmp/` (tests
   use `testutil.T3`, a fake `t3`).
+- OpenCode's web server is managed only through the upstream `opencode` CLI (`internal/ocweb`); it is not a system
+  service and agentctl writes no unit for it. Run real `opencode service ...` only with `XDG_CONFIG_HOME`,
+  `XDG_STATE_HOME` and `XDG_DATA_HOME` in `.tmp/` and a spare port (`opencode service set port`); tests use
+  `testutil.OpenCode`, a fake `opencode`.
 
 ## Tooling
 

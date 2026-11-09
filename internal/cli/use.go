@@ -79,7 +79,7 @@ func newRefreshCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return confirmAndApply(u, plan, st, yes, false)
+			return confirmAndApply(cmd.Context(), u, plan, st, yes, false)
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "apply without asking")
@@ -117,10 +117,10 @@ func runUse(ctx context.Context, u *ui, req app.Request, yes, dryRun bool) error
 	if err != nil {
 		return err
 	}
-	return confirmAndApply(u, plan, st, yes, dryRun)
+	return confirmAndApply(ctx, u, plan, st, yes, dryRun)
 }
 
-func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool) error {
+func confirmAndApply(ctx context.Context, u *ui, plan agent.Plan, st *config.State, yes, dryRun bool) error {
 	for _, w := range plan.Warnings {
 		u.warn(w)
 	}
@@ -133,6 +133,9 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 			u.ok(plan.Agent + " settings already match; nothing to change")
 		} else {
 			u.ok(fmt.Sprintf("%s already uses %s; nothing to change", plan.Agent, describeRoute(plan.Route)))
+		}
+		if !dryRun {
+			connectClaude(ctx, u, plan)
 		}
 		return nil
 	}
@@ -161,7 +164,20 @@ func confirmAndApply(u *ui, plan agent.Plan, st *config.State, yes, dryRun bool)
 	} else {
 		u.ok(fmt.Sprintf("%s now uses %s. Restart running %s sessions to pick it up.", plan.Agent, describeRoute(plan.Route), plan.Agent))
 	}
+	connectClaude(ctx, u, plan)
 	return nil
+}
+
+// connectClaude turns on OpenCode's claude-agent after an OpenCode route.
+// A failure is a warning: the route itself is in place.
+func connectClaude(ctx context.Context, u *ui, plan agent.Plan) {
+	switch on, err := app.ConnectOpenCodeClaude(ctx, plan); {
+	case err != nil:
+		u.warn("couldn't turn on OpenCode's claude-agent, so it lists no Claude models: " + err.Error() +
+			"; run `opencode auth login claude-agent --method claude-login`")
+	case on:
+		u.ok(app.ClaudeConnected)
+	}
 }
 
 func describeRoute(route string) string {

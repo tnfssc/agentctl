@@ -81,3 +81,18 @@ func TestTallIsTwoLinesOfItsWidth(t *testing.T) {
 		}
 	}
 }
+
+// A colored icon must not end the selected row's fill: Lip Gloss resets
+// after every span, so text after a pre-styled icon lost its background.
+func TestTallDotKeepsTheFill(t *testing.T) {
+	p := New(true)
+	out := p.TallDot("○", p.Dim, "OpenCode web", "stopped", "", 26, true, false)
+	for line := range strings.SplitSeq(out, "\n") {
+		if i := strings.Index(line, "\x1b[m"); i >= 0 && i+3 < len(line) && line[i+3] != '\x1b' {
+			t.Fatalf("text after a reset has no fill: %q", line)
+		}
+		if w := ansi.StringWidth(line); w != 26 {
+			t.Fatalf("row is %d wide, want 26: %q", w, line)
+		}
+	}
+}
