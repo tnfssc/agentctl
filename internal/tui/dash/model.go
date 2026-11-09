@@ -51,6 +51,14 @@ const (
 	signingDialog         // how to set up commit signing with an agent
 )
 
+// page is what the compact layout shows when no dialog is open.
+type page int
+
+const (
+	pageList   page = iota // the home list
+	pageDetail             // the focused item's page
+)
+
 // option is one row of a pick list.
 type option struct {
 	label, detail, value string
@@ -108,6 +116,8 @@ type Model struct {
 
 	dialog  dialog
 	focus   int    // selected sidebar item on the home screen
+	navTop  int    // first row of the home list in view
+	page    page   // compact layout: the home list or the focused item's page
 	hover   string // element under the mouse
 	options []option
 	pick    int
@@ -189,6 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(frameMsg); ok {
 		nm.ticking = false // the tick that delivered this frame is spent
 	}
+	nm.keepNavVisible()
 	if !nm.ticking && nm.needsFrames() {
 		nm.ticking = true
 		cmd = tea.Batch(cmd, tick())
@@ -361,10 +372,21 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 	m.toast = ""
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
+	case "back":
+		m.page = pageList
+		return m, nil
+	case "more":
+		m.showMore()
+		return m, nil
 	case "nav":
 		// Clicking a sidebar item selects it; clicking it again opens it.
+		// A compact list item opens its page at once.
 		i := slices.Index(m.homeIDs(), arg)
 		if i < 0 {
+			return m, nil
+		}
+		if m.compact() {
+			m.focus, m.page = i, pageDetail
 			return m, nil
 		}
 		if i != m.focus {
@@ -506,6 +528,29 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.dialog {
 	case noDialog:
 		ids := m.homeIDs()
+		if k >= "1" && k <= "3" && len(k) == 1 {
+			// Number keys press the focused item's buttons, left to right.
+			if b := m.detail(m.pal).buttons[k[0]-'1']; b.id != "" {
+				return m.act(b.id)
+			}
+			return m, nil
+		}
+		if m.compact() && m.page == pageDetail {
+			switch k {
+			case "esc", "backspace", "left", "h":
+				m.page = pageList
+				return m, nil
+			case "enter", "space":
+				return m.act(ids[m.focus])
+			case "q":
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		if m.compact() && (k == "enter" || k == "space" || k == "right" || k == "l") {
+			m.page = pageDetail
+			return m, nil
+		}
 		switch k {
 		case "q", "esc":
 			return m, tea.Quit

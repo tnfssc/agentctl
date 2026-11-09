@@ -26,8 +26,9 @@ import (
 // "No layout shift" in AGENTS.md). Text that does not fit is truncated or
 // scrolls inside its own fixed area.
 const (
-	minWidth  = 80
-	minHeight = 24
+	minWidth  = 80 // narrower is the compact layout
+	minHeight = 20 // shorter is the compact layout
+	logoRows  = 24 // from this height the header has the three-row logo
 
 	navTop     = 1 // nav row band: rows 1-3
 	pageTop    = 5 // first row under the nav hairline
@@ -61,8 +62,8 @@ func (s *scene) add(content string, x, y, z int, id string) {
 func (m Model) scene() *scene {
 	sc := &scene{rects: map[string]rect{}}
 	sc.add(strings.Repeat(strings.Repeat(" ", max(1, m.width))+"\n", max(1, m.height)), 0, 0, 0, "")
-	if m.width < minWidth || m.height < minHeight {
-		msg := fmt.Sprintf("agentctl needs at least %d×%d; this terminal is %d×%d.", minWidth, minHeight, m.width, m.height)
+	if m.tooSmall() {
+		msg := fmt.Sprintf("agentctl needs at least %d×%d; this terminal is %d×%d.", compactMinWidth, compactMinHeight, m.width, m.height)
 		sc.add(m.pal.Body(msg, max(10, m.width-4)), 2, 1, 1, "")
 		return sc
 	}
@@ -137,32 +138,55 @@ func (m Model) drawPage(sc *scene) {
 		p = p.Faded()
 	}
 	w, h := m.width, m.height
+	if m.compact() {
+		m.drawCompactHeader(sc, p)
+		if m.page == pageDetail {
+			m.drawCompactDetail(sc, p)
+		} else {
+			m.drawNav(sc, p)
+		}
+		m.drawFooter(sc, p)
+		return
+	}
 
-	// Nav: logo, text links, status pill.
-	sc.add(p.Logo(), 2, navTop, 1, "")
-	x := 2 + skin.LogoWidth + 4
+	// Nav: logo, text links, status pill; a short terminal gets a one-line
+	// header with the wordmark and no pill.
+	linkY, x := navTop+1, 2+skin.LogoWidth+4
+	if m.shortHeader() {
+		sc.add(p.Wordmark(), 2, 0, 1, "")
+		linkY, x = 0, 2+8+4
+	} else {
+		sc.add(p.Logo(), 2, navTop, 1, "")
+	}
 	for _, l := range navLinks {
 		style := skin.Fg(p.Muted)
 		if m.hover == l.id {
 			style = skin.Fg(p.Text).Underline(true)
 		}
-		sc.add(style.Render(l.label), x, navTop+1, 1, l.id)
+		sc.add(style.Render(l.label), x, linkY, 1, l.id)
 		x += lipgloss.Width(l.label) + 3
 	}
-	// The pill shows whenever the terminal is wide enough, whatever it says.
-	if px := w - pillWidth - 2; px >= x {
+	// The pill shows whenever the terminal is big enough, whatever it says.
+	if px := w - pillWidth - 2; px >= x && !m.shortHeader() {
 		sc.add(m.pill(p), px, navTop, 1, "pill")
 	}
-	sc.add(p.HLine(w), 0, pageTop-1, 1, "")
+	top := m.contentTop()
+	sc.add(p.HLine(w), 0, top-1, 1, "")
 
 	// Body: sidebar, hairline, detail.
 	bottom := h - 3
 	sw := m.sidebarWidth()
-	sc.add(p.VLine(bottom-pageTop+1), sw, pageTop, 1, "")
-	m.drawSidebar(sc, p, bottom)
+	sc.add(p.VLine(bottom-top+1), sw, top, 1, "")
+	m.drawNav(sc, p)
 	m.drawDetail(sc, p)
+	m.drawFooter(sc, p)
+}
 
-	// Footer: status on the left, hints from a fixed column on the right.
+// drawFooter puts the status on the left and hints from a fixed column on
+// the right. A compact footer has room for one: the status when there is
+// one, else the hints.
+func (m Model) drawFooter(sc *scene, p skin.Palette) {
+	w, h := m.width, m.height
 	sc.add(p.HLine(w), 0, h-2, 1, "")
 	hintX := w - 2 - maxHintWidth
 	var status string
@@ -173,6 +197,13 @@ func (m Model) drawPage(sc *scene) {
 		status = skin.Fg(p.Red).Render("✗ ") + skin.Fg(p.Text).Render(m.toast)
 	case m.toast != "":
 		status = skin.Fg(p.Green).Render("✓ ") + skin.Fg(p.Text).Render(m.toast)
+	}
+	if m.compact() {
+		if status == "" {
+			status = skin.Fg(p.Dim).Render(m.hints())
+		}
+		sc.add(skin.Cell(status, w-2), 1, h-1, 1, "status")
+		return
 	}
 	sc.add(skin.Cell(status, hintX-4), 2, h-1, 1, "status")
 	sc.add(skin.Fg(p.Dim).Render(skin.Cell(m.hints(), maxHintWidth)), hintX, h-1, 1, "hints")
@@ -205,8 +236,13 @@ var maxHintWidth = func() int {
 }()
 
 func (m Model) hints() string {
-	if m.dialog == signingDialog && m.remote {
+	switch {
+	case m.dialog == signingDialog && m.remote:
 		return "enter done" // no clipboard over SSH
+	case m.compact() && m.dialog == noDialog && m.page == pageDetail:
+		return "1-3 buttons · esc back"
+	case m.compact() && m.dialog == noDialog:
+		return "tap or ↑↓ enter · q quit"
 	}
 	return hintTexts[m.dialog]
 }
@@ -246,70 +282,6 @@ func (m Model) pill(p skin.Palette) string {
 	}
 }
 
-// proxyWindow is the first proxy shown and the window's height, keeping the
-// selected proxy visible. The height depends only on the terminal; "Add a
-// proxy" sits on the row below it, so it never moves.
-func (m Model) proxyWindow(listTop, bottom int) (first, rows int) {
-	names := m.cfg.Names()
-	rows = max(1, bottom-listTop)
-	if len(names) <= rows {
-		return 0, rows
-	}
-	sel := m.focus - len(m.statuses) - 3 // agents, T3 Code, then instructions and git
-	first = max(0, min(sel-rows+1, len(names)-rows))
-	return first, rows
-}
-
-func (m Model) drawSidebar(sc *scene, p skin.Palette, bottom int) {
-	if !m.loaded {
-		sc.add(skin.Fg(p.Dim).Render(skin.Spin(m.frame)+" loading"), 2, pageTop+1, 1, "")
-		return
-	}
-	rw := m.sidebarWidth() - 3
-	ids := m.homeIDs()
-	selected := ids[min(m.focus, len(ids)-1)]
-	row := func(y int, id, icon, label string, labelW int, detail string) {
-		sc.add(p.Row(icon, label, labelW, detail, rw, id == selected, m.hover == "nav:"+id), 2, y, 2, "nav:"+id)
-	}
-	// Short terminals put section labels right on their rows; the gap
-	// depends on the terminal size only.
-	gap := 1
-	if m.height < 26 {
-		gap = 0
-	}
-	y := pageTop + 1
-	sc.add(p.Label("Agents"), 3, y, 1, "")
-	y += 1 + gap
-	for _, as := range m.statuses {
-		detail := "own login"
-		if as.status.Route != agent.Local {
-			detail = "→ " + as.status.Route
-		}
-		row(y, "agent:"+as.agent.Name, "◆", as.agent.Title, 11, detail)
-		y++
-	}
-	row(y, "t3", "◆", "T3 Code", 11, m.t3State())
-	y++
-	y++
-	sc.add(p.Label("Behavior"), 3, y, 1, "")
-	y += 1 + gap
-	row(y, "behavior", "◇", "Instructions", 11, "all agents")
-	row(y+1, "git", "◇", "Git", 11, m.signingState())
-	y += 3
-	names := m.cfg.Names()
-	first, rows := m.proxyWindow(y+1+gap, bottom)
-	label := p.Label("Proxies")
-	if len(names) > rows {
-		label += skin.Fg(p.Dim).Render(fmt.Sprintf("  %d–%d of %d", first+1, first+rows, len(names)))
-	}
-	sc.add(label, 3, y, 1, "")
-	y += 1 + gap
-	for i, n := range names[first:min(len(names), first+rows)] {
-		row(y+i, "proxy:"+n, m.proxyDot(p, n), n, rw-4, "")
-	}
-	row(y+rows, "add", "+", "Add a proxy", rw-4, "")
-}
-
 // proxyDot is a colored status dot for a proxy.
 func (m Model) proxyDot(p skin.Palette, name string) string {
 	r, ok := m.probes[name]
@@ -340,12 +312,13 @@ func (m Model) drawDetail(sc *scene, p skin.Palette) {
 	left := m.sidebarWidth() + 3
 	textW := min(72, m.width-left-2)
 	d := m.detail(p)
-	sc.add(p.Label(d.label), left, pageTop+1, 2, "")
-	sc.add(skin.Cell(p.Heading(d.heading), textW), left, pageTop+2, 2, "")
+	top := m.bodyTop()
+	sc.add(p.Label(d.label), left, top, 2, "")
+	sc.add(skin.Cell(p.Heading(d.heading), textW), left, top+1, 2, "")
 	for i, line := range skin.Clip(d.body, textW, bodyLines) {
-		sc.add(skin.Fg(p.Muted).Render(line), left, pageTop+4+i, 2, "")
+		sc.add(skin.Fg(p.Muted).Render(line), left, top+3+i, 2, "")
 	}
-	by := pageTop + 4 + bodyLines + 1
+	by := top + 3 + bodyLines + 1
 	for i, b := range d.buttons {
 		if b.label != "" {
 			sc.add(p.Button(b.label, homeSlotW, b.primary, m.hover == b.id), left+i*(homeSlotW+1), by, 2, b.id)
@@ -496,6 +469,9 @@ const (
 )
 
 func (m Model) dialogRect() rect {
+	if m.compact() {
+		return m.content() // the whole page; header and footer stay
+	}
 	w := max(62, min(88, m.width-10))
 	h := min(maxDialogH, m.height-2)
 	return rect{(m.width - w) / 2, (m.height - h) / 2, w, h}
@@ -504,27 +480,38 @@ func (m Model) dialogRect() rect {
 // dialogBody is the area inside the shell for a dialog's content.
 func (m Model) dialogBody() rect {
 	d := m.dialogRect()
+	if m.compact() {
+		// Border, label and heading above; buttons and border below.
+		return rect{d.X + 2, d.Y + 3, d.W - 4, d.H - 7}
+	}
 	return rect{d.X + 3, d.Y + 4, d.W - 6, d.H - dialogChrome}
 }
 
-// listRows is how many options a pick dialog shows at once; it depends on
-// the terminal size only.
+// listRows is how many options a pick dialog shows at once, each two rows
+// tall; it depends on the terminal size only.
 func (m Model) listRows() int {
 	b := m.dialogBody()
 	switch m.dialog {
 	case tuneDialog:
-		return max(1, b.H-tuneChrome)
+		return max(1, (b.H-m.tuneChrome())/2)
 	case devicesDialog:
 		return m.devicesRows()
 	}
-	return max(1, b.H-3)
+	return max(1, (b.H-3)/2) // intro and blank above, more row below
 }
 
 // tuneChrome is the tune body minus its list: intro, blank, more row,
 // blank, and the item description area.
-const tuneChrome = 2 + 1 + 1 + tuneAbout
+func (m Model) tuneChrome() int { return 2 + 1 + 1 + m.tuneAbout() }
 
-const tuneAbout = 5 // why (3), cost (1), note (1)
+// tuneAbout is the item description area: why (3), cost (1) and note (1),
+// or why and cost on one row each when the dialog is short.
+func (m Model) tuneAbout() int {
+	if m.dialogBody().H < 16 {
+		return 2
+	}
+	return 5
+}
 
 // confirm body: backup note, blank, two warning rows, blank, then the diff.
 const confirmChrome = 5
@@ -538,8 +525,16 @@ func (m *Model) sizeDialog() {
 		h -= confirmChrome
 	}
 	m.vp.SetHeight(max(1, h))
+	w := b.W - 4
+	if m.compact() {
+		if _, inline := m.fieldLayout(); inline {
+			w = b.W - labelW - 3
+		} else {
+			w = b.W - 3
+		}
+	}
 	for i := range m.inputs {
-		m.inputs[i].SetWidth(b.W - 4)
+		m.inputs[i].SetWidth(max(1, w))
 	}
 }
 
@@ -551,16 +546,38 @@ func (m Model) panel(sc *scene, label, heading string, extras []button, cancel, 
 	shell := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(p.Strong).
 		Width(d.W).Height(d.H).Render("")
 	sc.add(shell, d.X, d.Y, 50, "m:panel")
-	iw := d.W - 6
-	sc.add(skin.Cell(p.Label(label), iw-2), d.X+3, d.Y+1, 51, "")
-	sc.add(skin.Cell(p.Heading(heading), iw), d.X+3, d.Y+2, 51, "")
+	pad := 3
+	if m.compact() {
+		pad = 2
+	}
+	iw := d.W - 2*pad
+	sc.add(skin.Cell(p.Label(label), iw-2), d.X+pad, d.Y+1, 51, "")
+	sc.add(skin.Cell(p.Heading(heading), iw), d.X+pad, d.Y+2, 51, "")
 	closeStyle := skin.Fg(p.Dim)
 	if m.hover == "m:close" {
 		closeStyle = skin.Fg(p.Text)
 	}
-	sc.add(closeStyle.Render("×"), d.X+d.W-4, d.Y+1, 52, "m:close")
+	sc.add(closeStyle.Render("×"), d.X+d.W-pad-1, d.Y+1, 52, "m:close")
 
 	by := d.Y + d.H - 4
+	if m.compact() {
+		// Three equal slots across: extras from the left, then cancel, then
+		// the primary action on the right.
+		sw := (iw - 2) / 3
+		put := func(b *button, slot int) {
+			if b != nil {
+				sc.add(p.Button(fit(b.label, sw), sw, b.primary, m.hover == b.id), d.X+pad+slot*(sw+1), by, 52, b.id)
+			}
+		}
+		put(primary, 2)
+		put(cancel, 1)
+		for i := range extras {
+			if i == 0 || cancel == nil {
+				put(&extras[i], i)
+			}
+		}
+		return
+	}
 	put := func(b *button, x int) {
 		if b != nil {
 			sc.add(p.Button(b.label, dialogSlot, b.primary, m.hover == b.id), x, by, 52, b.id)
@@ -663,7 +680,6 @@ func (m Model) drawTune(sc *scene) {
 		[]button{{"Reset to default", "m:tune-reset", false}}, &button{"Cancel", "m:cancel", false}, &button{"Review", "m:tune-review", true})
 	sc.add(skin.Cell(skin.Fg(p.Muted).Render("Ticked items are applied; unticked ones reset to the default."), b.W), b.X, b.Y, 53, "")
 	rows := m.listRows()
-	labelW := b.W * 6 / 10
 	for r := range rows {
 		i := m.top + r
 		if i >= len(m.options) {
@@ -684,18 +700,20 @@ func (m Model) drawTune(sc *scene) {
 			state = "applied"
 		}
 		id := "m:opt:" + strconv.Itoa(i)
-		sc.add(p.Row(box, it.Title, labelW, state, b.W, i == m.pick, m.hover == id), b.X, b.Y+2+r, 53, id)
+		sc.add(p.Tall(box, it.Title, state, "", b.W, i == m.pick, m.hover == id), b.X, b.Y+2+2*r, 53, id)
 	}
-	m.drawMore(sc, b.X, b.Y+2+rows, rows)
+	m.drawMore(sc, b.X, b.Y+2+2*rows, rows)
 
 	cur := m.tuneItems[m.pick]
-	about := b.Y + b.H - tuneAbout
-	for i, line := range skin.Clip(cur.Why, b.W, 3) {
+	aboutRows := m.tuneAbout()
+	about := b.Y + b.H - aboutRows
+	whyRows := max(1, aboutRows-2)
+	for i, line := range skin.Clip(cur.Why, b.W, whyRows) {
 		sc.add(skin.Fg(p.Muted).Render(line), b.X, about+i, 53, "")
 	}
-	sc.add(skin.Cell(skin.Fg(p.Dim).Render("Cost: ")+skin.Fg(p.Muted).Render(cur.Cost), b.W), b.X, about+3, 53, "")
-	if len(cur.Notes) > 0 {
-		sc.add(skin.Cell(skin.Fg(p.Amber).Render("! "+cur.Notes[0]), b.W), b.X, about+4, 53, "")
+	sc.add(skin.Cell(skin.Fg(p.Dim).Render("Cost: ")+skin.Fg(p.Muted).Render(cur.Cost), b.W), b.X, about+whyRows, 53, "")
+	if len(cur.Notes) > 0 && aboutRows > 2 {
+		sc.add(skin.Cell(skin.Fg(p.Amber).Render("! "+cur.Notes[0]), b.W), b.X, about+whyRows+1, 53, "")
 	}
 }
 
@@ -709,7 +727,6 @@ func (m Model) drawMore(sc *scene, x, y, rows int) {
 func (m Model) drawOptions(sc *scene, x, y, rows int) {
 	p := m.pal
 	w := m.dialogBody().W
-	labelW := w * 45 / 100
 	for r := range rows {
 		i := m.top + r
 		if i >= len(m.options) {
@@ -717,29 +734,79 @@ func (m Model) drawOptions(sc *scene, x, y, rows int) {
 		}
 		o := m.options[i]
 		id := "m:opt:" + strconv.Itoa(i)
-		sc.add(p.Row("›", o.label, labelW, o.detail, w, i == m.pick, m.hover == id), x, y+r, 53, id)
+		sc.add(p.Tall("›", o.label, o.detail, "", w, i == m.pick, m.hover == id), x, y+2*r, 53, id)
 	}
-	m.drawMore(sc, x, y+rows, rows)
+	m.drawMore(sc, x, y+2*rows, rows)
 }
 
 func (m Model) drawAddForm(sc *scene) {
-	p := m.pal
-	b := m.dialogBody()
 	m.panel(sc, "Proxy · new", "Add a CLIProxyAPI server", nil, &button{"Cancel", "m:cancel", false}, &button{"Check and add", "m:submit", true})
-	labels := []string{"Name", "URL", "API key"}
-	hints := []string{"a short name, e.g. spark", "e.g. its Tailscale serve URL", "optional; a client key from the proxy's config"}
-	for i := range labels {
-		sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), b.W), b.X, b.Y+i*4, 53, "")
-	}
-	for i, in := range m.inputs {
-		sc.add(m.inputBox(in, i == m.field, b.W), b.X, b.Y+i*4+1, 53, "m:input:"+strconv.Itoa(i))
-	}
-	// The error row is always reserved, empty or not.
-	sc.add(skin.Cell(skin.Fg(p.Red).Render(errLine(m.formErr)), b.W), b.X, b.Y+formErrRow, 53, "m:error")
+	m.drawFields(sc, []string{"Name", "URL", "API key"},
+		[]string{"a short name, e.g. spark", "e.g. its Tailscale serve URL", "optional; a client key from the proxy's config"})
 }
 
-// formErrRow is the row every form reserves for its error, empty or not.
+// formErrRow is the row every wide form reserves for its error, empty or not.
 const formErrRow = 12
+
+// fieldLayout is where form fields go: rows per field, and whether label
+// and input share a row. Compact dialogs give each field a label line and a
+// one-line input, or one line for both when even that doesn't fit; the
+// choice depends on the terminal size only.
+func (m Model) fieldLayout() (step int, inline bool) {
+	switch b := m.dialogBody(); {
+	case !m.compact():
+		return 4, false
+	case maxFields*2+1 <= b.H:
+		return 2, false
+	default:
+		return 1, true
+	}
+}
+
+// labelW is the label column of inline fields.
+const labelW = 10
+
+// maxFields is the most fields any form has; every form lays out as if it
+// had that many, so all forms match at a given terminal size.
+const maxFields = 3
+
+// drawFields draws a form's labeled inputs and its reserved error row.
+func (m Model) drawFields(sc *scene, labels, hints []string) {
+	p := m.pal
+	b := m.dialogBody()
+	step, inline := m.fieldLayout()
+	for i, in := range m.inputs {
+		y := b.Y + i*step
+		id := "m:input:" + strconv.Itoa(i)
+		switch {
+		case inline:
+			sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i]), labelW), b.X, y, 53, "")
+			sc.add(m.inputLine(in, i == m.field, b.W-labelW), b.X+labelW, y, 53, id)
+		case m.compact():
+			sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), b.W), b.X, y, 53, "")
+			sc.add(m.inputLine(in, i == m.field, b.W), b.X, y+1, 53, id)
+		default:
+			sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), b.W), b.X, y, 53, "")
+			sc.add(m.inputBox(in, i == m.field, b.W), b.X, y+1, 53, id)
+		}
+	}
+	errY := b.Y + formErrRow
+	if m.compact() {
+		errY = b.Y + b.H - 1
+	}
+	// The error row is always reserved, empty or not.
+	sc.add(skin.Cell(skin.Fg(p.Red).Render(errLine(m.formErr)), b.W), b.X, errY, 53, "m:error")
+}
+
+// inputLine is a one-row input for compact forms, its caret accented when
+// focused.
+func (m Model) inputLine(in textinput.Model, focused bool, width int) string {
+	caret := skin.Fg(m.pal.Dim).Render("› ")
+	if focused {
+		caret = skin.Fg(m.pal.Accent).Render("› ")
+	}
+	return skin.Cell(caret+in.View(), width)
+}
 
 // inputBox is a text input in a hairline box, accented when focused.
 func (m Model) inputBox(in textinput.Model, focused bool, width int) string {

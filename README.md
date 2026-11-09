@@ -48,7 +48,7 @@ go install github.com/tnfssc/agentctl/cmd/agentctl@latest
 
 ## Use
 
-Run `agentctl` in a terminal for the dashboard showing where each agent is routed and which proxies work.
+Run `agentctl` in a terminal for the dashboard (it also works over SSH from a phone, down to 40×16) showing where each agent is routed and which proxies work.
 Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh model lists.
 
 The same things from the command line:

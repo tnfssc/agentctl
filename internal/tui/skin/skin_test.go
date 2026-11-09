@@ -61,3 +61,23 @@ func TestQRDrawsEveryModule(t *testing.T) {
 		}
 	}
 }
+
+func TestTallIsTwoLinesOfItsWidth(t *testing.T) {
+	p := New(true)
+	for _, sel := range []bool{false, true} {
+		for _, hover := range []bool{false, true} {
+			for _, mark := range []string{"", "›"} {
+				s := p.Tall("◆", "OpenCode with a long long name", "→ home · gemini-3.1-pro", mark, 30, sel, hover)
+				lines := strings.Split(s, "\n")
+				if len(lines) != 2 {
+					t.Fatalf("want 2 lines, got %d", len(lines))
+				}
+				for _, l := range lines {
+					if w := lipgloss.Width(l); w != 30 {
+						t.Errorf("selected %v hover %v mark %q: line width %d: %q", sel, hover, mark, w, ansi.Strip(l))
+					}
+				}
+			}
+		}
+	}
+}

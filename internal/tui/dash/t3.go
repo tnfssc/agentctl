@@ -420,7 +420,7 @@ func (m Model) submitPair() (tea.Model, tea.Cmd) {
 // blank, and the selected entry's info row.
 const devicesChrome = 5
 
-func (m Model) devicesRows() int { return max(1, m.dialogBody().H-devicesChrome) }
+func (m Model) devicesRows() int { return max(1, (m.dialogBody().H-devicesChrome)/2) }
 
 func (m Model) drawDevices(sc *scene) {
 	p := m.pal
@@ -436,7 +436,6 @@ func (m Model) drawDevices(sc *scene) {
 	sc.add(skin.Cell(skin.Fg(p.Muted).Render(intro), b.W), b.X, b.Y, 53, "")
 	rows := m.devicesRows()
 	now := time.Now()
-	labelW := b.W * 4 / 10
 	for r := range rows {
 		i := m.top + r
 		if i >= len(m.access) {
@@ -458,9 +457,9 @@ func (m Model) drawDevices(sc *scene) {
 			when += " · idle"
 		}
 		id := "m:opt:" + strconv.Itoa(i)
-		sc.add(p.Row(icon, orUnnamed(a.Label), labelW, when, b.W, i == m.pick, m.hover == id), b.X, b.Y+2+r, 53, id)
+		sc.add(p.Tall(icon, orUnnamed(a.Label), when, "", b.W, i == m.pick, m.hover == id), b.X, b.Y+2+2*r, 53, id)
 	}
-	m.drawMore(sc, b.X, b.Y+2+rows, rows)
+	m.drawMore(sc, b.X, b.Y+2+2*rows, rows)
 	var info string
 	if m.pick < len(m.access) {
 		a := m.access[m.pick]
@@ -473,19 +472,9 @@ func (m Model) drawDevices(sc *scene) {
 }
 
 func (m Model) drawPairForm(sc *scene) {
-	p := m.pal
-	b := m.dialogBody()
 	m.panel(sc, "T3 Code · pair a device", "Make a one-time pairing link", nil,
 		&button{"Cancel", "m:cancel", false}, &button{"Make link", "m:submit-pair", true})
-	labels := []string{"Device name", "Server address"}
-	hints := []string{"shown in the devices list", "how the new device reaches this machine"}
-	for i := range labels {
-		sc.add(skin.Cell(skin.Fg(p.Text).Render(labels[i])+"  "+skin.Fg(p.Dim).Render(hints[i]), b.W), b.X, b.Y+i*4, 53, "")
-	}
-	for i, in := range m.inputs {
-		sc.add(m.inputBox(in, i == m.field, b.W), b.X, b.Y+i*4+1, 53, "m:input:"+strconv.Itoa(i))
-	}
-	sc.add(skin.Cell(skin.Fg(p.Red).Render(errLine(m.formErr)), b.W), b.X, b.Y+formErrRow, 53, "m:error")
+	m.drawFields(sc, []string{"Device", "Address"}, []string{"shown in the devices list", "how the new device reaches this machine"})
 }
 
 func (m Model) drawPairing(sc *scene) {

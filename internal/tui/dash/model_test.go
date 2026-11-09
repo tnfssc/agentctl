@@ -2,6 +2,7 @@ package dash
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -256,5 +257,32 @@ func TestSigningShowsTheCommandAndCopiesOnlyLocally(t *testing.T) {
 	remote := send(t, m, click("signing"))
 	if _, ok := rectsOf(remote)["m:copy-guide"]; ok || remote.hints() != "enter done" {
 		t.Fatal("over SSH there is no clipboard: no copy button, no copy hint")
+	}
+}
+
+// focusOn selects a home item the way keys and clicks do, scrolling the
+// list to it.
+func focusOn(m Model, id string) Model {
+	m.focus = idx(m, id)
+	m.keepNavVisible()
+	return m
+}
+
+func TestTappingMorePagesThroughTheList(t *testing.T) {
+	msg := loaded()
+	for i := range 6 {
+		msg.cfg.Proxies[fmt.Sprintf("p%d", i)] = config.Proxy{URL: "http://x"}
+	}
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 40, Height: 16}, msg)
+	seen := map[string]bool{}
+	for range 20 {
+		m = send(t, m, click("more"))
+		seen[m.homeIDs()[m.focus]] = true
+		if _, ok := rectsOf(m)["nav:"+m.homeIDs()[m.focus]]; !ok {
+			t.Fatalf("tapping more should bring %q into view", m.homeIDs()[m.focus])
+		}
+	}
+	if !seen["proxy:p5"] || !seen["agent:claude"] {
+		t.Fatalf("more should reach the end and wrap to the top: %v", seen)
 	}
 }

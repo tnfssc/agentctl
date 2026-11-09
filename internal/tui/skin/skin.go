@@ -181,6 +181,18 @@ const LogoWidth = 24
 // Tagline says what agentctl does, under the logo where there is room.
 const Tagline = "route coding agents to their own login or a CLIProxyAPI server"
 
+// Wordmark is the logo's one-line form for headers with no room for three
+// rows, in the same gradient.
+func (p Palette) Wordmark() string {
+	const word = "agentctl"
+	colors := lipgloss.Blend1D(len(word), p.Accent, p.Blue, p.Cyan)
+	var b strings.Builder
+	for i, r := range word {
+		b.WriteString(Fg(colors[i]).Bold(true).Render(string(r)))
+	}
+	return b.String()
+}
+
 // Logo renders the logo with a gradient from the accent violet through
 // blue to cyan, column by column.
 func (p Palette) Logo() string {
@@ -217,6 +229,34 @@ func (p Palette) Row(icon, label string, labelW int, detail string, width int, s
 		return Cell(" "+Fg(p.Text).Render(icon+" "+label)+Fg(p.Muted).Render(detail), width)
 	default:
 		return Cell(" "+Fg(p.Dim).Render(icon+" ")+Fg(p.Muted).Render(label)+Fg(p.Dim).Render(detail), width)
+	}
+}
+
+// Tall renders a two-line list item, exactly width cells wide: icon, label
+// and an optional trailing mark (e.g. "›") on the first line, detail under
+// the label on the second. Two lines make a target a finger can hit on a
+// phone. Selected items sit on a raised fill with an accent marker.
+func (p Palette) Tall(icon, label, detail, mark string, width int, selected, hover bool) string {
+	markW := lipgloss.Width(mark)
+	textW := max(0, width-3-lipgloss.Width(icon)-markW-1)
+	top := icon + " " + Cell(label, textW)
+	bottom := strings.Repeat(" ", lipgloss.Width(icon)+1) + Cell(detail, textW)
+	if mark != "" {
+		top += " " + mark
+		bottom += " " + strings.Repeat(" ", markW)
+	}
+	switch {
+	case selected:
+		on, dim := On(p.Text, p.Raised), On(p.Muted, p.Raised)
+		bar := On(p.Accent, p.Raised).Render("▎")
+		line := func(s string, st lipgloss.Style) string {
+			return bar + st.Render(s) + On(p.Text, p.Raised).Render(strings.Repeat(" ", max(0, width-1-lipgloss.Width(s))))
+		}
+		return line(top, on.Bold(true)) + "\n" + line(bottom, dim)
+	case hover:
+		return Cell(" "+Fg(p.Text).Render(top), width) + "\n" + Cell(" "+Fg(p.Muted).Render(bottom), width)
+	default:
+		return Cell(" "+Fg(p.Muted).Render(top), width) + "\n" + Cell(" "+Fg(p.Dim).Render(bottom), width)
 	}
 }
 

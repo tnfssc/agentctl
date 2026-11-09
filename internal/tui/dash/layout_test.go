@@ -22,7 +22,7 @@ import (
 // These tests enforce the "no layout shift" rule: an element that exists in
 // two states must have the same rectangle in both.
 
-var sizes = [][2]int{{80, 24}, {100, 30}, {120, 40}, {200, 60}}
+var sizes = [][2]int{{40, 16}, {44, 30}, {60, 20}, {100, 20}, {80, 19}, {80, 24}, {100, 30}, {120, 40}, {200, 60}}
 
 type state struct {
 	name string
@@ -95,12 +95,15 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		mr := send(t, m, routed)
 
 		var states []state
+		byFocus := map[int][]state{}
 		for focus := range 5 {
 			for _, base := range []state{{"local", m}, {"routed", mr}} {
-				s := base.m
-				s.focus = focus
+				s := focusOn(base.m, base.m.homeIDs()[focus])
+				s.page = pageDetail // compact layouts show buttons on the item's page
 				for _, ps := range probeStates(t, s) {
-					states = append(states, state{fmt.Sprintf("%s focus=%d %s", base.name, focus, ps.name), ps.m})
+					st := state{fmt.Sprintf("%s focus=%d %s", base.name, focus, ps.name), ps.m}
+					states = append(states, st)
+					byFocus[focus] = append(byFocus[focus], st)
 				}
 			}
 		}
@@ -110,9 +113,13 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		toast.toast, toast.toastErr = strings.Repeat("something failed ", 20), true
 		states = append(states, state{"busy", busy}, state{"toast", toast})
 
-		sameRects(t, states,
-			"pill", "status", "hints", "nav:agent:claude", "nav:agent:codex", "nav:behavior", "nav:git", "nav:proxy:spark", "nav:add",
-			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "add", "testall", "refresh", "quit")
+		// The frame never moves, whatever is selected.
+		sameRects(t, states, "pill", "status", "hints", "more", "nav:add", "add", "testall", "refresh", "quit",
+			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "back")
+		// Items move only when a new selection scrolls the list.
+		for _, group := range byFocus {
+			sameRects(t, group, "nav:agent:claude", "nav:agent:codex", "nav:t3", "nav:behavior", "nav:git", "nav:proxy:spark")
+		}
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
 			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions"},
@@ -289,7 +296,8 @@ func TestDialogsHaveNoLayoutShift(t *testing.T) {
 		}
 		sameRects(t, bodies, "m:body")
 		sameRects(t, lists, "m:opt:0")
-		sameRects(t, devices, "m:opt:0", "m:opt:1", "m:opt:2", "m:opt:59")
+		// Items scroll inside the list; its first row and the rows around it stay.
+		sameRects(t, devices, "m:opt:0", "m:info", "m:revoke", "m:pair")
 	}
 }
 
@@ -342,15 +350,24 @@ func TestMultilineTextStaysOneRow(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = multi, true
 		down := send(t, m, probedMsg{name: "spark", probe: app.Probe{HealthErr: errors.New(multi)}})
-		down.focus = idx(down, "proxy:spark")
+		down = focusOn(down, "proxy:spark")
+		down.page = pageDetail
 		form, _ := m.openAdd()
 		withErr := send(t, form.(Model), savedMsg{name: "x", err: errors.New(multi)})
-		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}})
+		picker := send(t, m, click("switch:codex"), click("m:opt:1"), modelsMsg{route: "spark", list: []proxy.Model{{ID: multi, OwnedBy: "openai"}}}, keyPress("down"))
 		for _, c := range []struct {
 			m  Model
 			id string
 		}{{toast, "status"}, {down, "fact:2"}, {withErr, "m:error"}, {picker, "m:opt:1"}} {
-			if r := rectsOf(c.m)[c.id]; r.H != 1 {
+			want := 1
+			if strings.HasPrefix(c.id, "m:opt:") {
+				want = 2 // list items are two rows, whatever their text
+			}
+			r, shown := rectsOf(c.m)[c.id]
+			if !shown && m.compact() {
+				continue // the smallest pages have no room for it
+			}
+			if r.H != want {
 				t.Errorf("%s: %q is %d rows tall", sizeName(m), c.id, r.H)
 			}
 		}
@@ -394,5 +411,36 @@ func TestProbeResultKeepsReportScroll(t *testing.T) {
 	}
 	if m = send(t, m, probedMsg{name: "spark", probe: live(false)}); m.vp.YOffset() != off {
 		t.Fatalf("new probe result moved the report from %d to %d", off, m.vp.YOffset())
+	}
+}
+
+// TestTouchTargets keeps things a finger can hit on a phone: list items
+// and options two rows tall, buttons three, all inside the screen and clear
+// of the footer.
+func TestTouchTargets(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	for _, sz := range sizes {
+		m := send(t, base(t, sz[0], sz[1]), probedMsg{name: "spark", probe: live(false)})
+		detail := m
+		detail.page = pageDetail
+		states := append([]state{{"home", m}, {"detail", detail}}, dialogStates(t, m)...)
+		for _, s := range states {
+			for id, r := range rectsOf(s.m) {
+				if r.X < 0 || r.Y < 0 || r.X+r.W > sz[0] || r.Y+r.H > sz[1] {
+					t.Errorf("%s %s: %q at %+v leaves the screen", sizeName(s.m), s.name, id, r)
+				}
+				tall := strings.HasPrefix(id, "nav:") || strings.HasPrefix(id, "m:opt:")
+				if tall && (r.H < 2 || r.Y+r.H > sz[1]-2) {
+					t.Errorf("%s %s: %q at %+v is under two rows or in the footer", sizeName(s.m), s.name, id, r)
+				}
+			}
+		}
+		for _, id := range []string{"switch:claude", "back"} {
+			if r, ok := rectsOf(detail)[id]; ok && r.H != 3 {
+				t.Errorf("%s: button %q is %d rows tall", sizeName(m), id, r.H)
+			}
+		}
 	}
 }

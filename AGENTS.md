@@ -56,6 +56,11 @@ hit testing. Keep it simple and cheap over SSH: nothing animates except spinners
 schedules no frames, and SSH sessions get no hover tracking. Lip Gloss resets styles after every span, so text inside
 a filled shape must carry the fill (`skin.On`).
 
+It must work on phones over SSH. Below 80 columns or 20 rows it switches to the compact layout (`layout.go`): one page at
+a time, full-screen dialogs, buttons in fixed full-width slots; below 24 rows the header is one line. 40×16 is the
+minimum. List items and options are two rows tall everywhere so a finger can hit them; the layout tests run at phone
+sizes and check targets (`TestTouchTargets`). Layout is still chosen from the terminal size alone.
+
 ## Verifying interactive flows by hand
 
 Run under tmux with a script (tmux's default shell is fish, so wrap commands in `sh`), then `tmux capture-pane -p`.
