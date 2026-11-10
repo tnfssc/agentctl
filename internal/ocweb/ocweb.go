@@ -55,10 +55,6 @@ type Status struct {
 
 	Latest    string // newest release, "" if unknown
 	LatestErr error
-
-	// Remote is on when the server is also reachable over OpenTunnel, at an
-	// unguessable address only `opencode pair --remote` reveals.
-	Remote bool
 }
 
 // Installed reports whether an opencode CLI exists.
@@ -94,10 +90,6 @@ func Inspect(ctx context.Context) (Status, error) {
 		return s, nil
 	}
 	s.Latest, s.LatestErr = latest(ctx)
-	if out, err = run(ctx, s.CLI, "service", "get", "remote"); err != nil {
-		return s, err
-	}
-	s.Remote = strings.TrimSpace(string(out)) == "true"
 	if out, err = run(ctx, s.CLI, "service", "status"); err != nil {
 		return s, err
 	}
@@ -240,20 +232,6 @@ func SignOutAll(ctx context.Context, out io.Writer) error {
 	return step(ctx, out, []string{"service", "unset", "password"}, []string{"service", "start"})
 }
 
-// RemoteWarning is OpenCode's own warning before remote access goes on.
-const RemoteWarning = "This exposes the server to the internet through OpenTunnel. Traffic is end-to-end encrypted, " +
-	"and access needs the server's password or a paired session."
-
-// SetRemote turns remote access over OpenTunnel on or off and starts the
-// server again. The first time on, OpenCode creates this machine's tunnel,
-// which can take a minute.
-func SetRemote(ctx context.Context, out io.Writer, on bool) error {
-	if on {
-		return step(ctx, out, []string{"service", "set", "remote", "true"}, []string{"service", "start"})
-	}
-	return step(ctx, out, []string{"service", "unset", "remote"}, []string{"service", "start"})
-}
-
 // ConnectClaude turns on OpenCode's claude-agent provider, which runs the
 // real `claude` for Claude models. Until it is connected the provider never
 // asks `claude` for its models, so OpenCode lists none. Connecting records
@@ -290,22 +268,12 @@ var expiresRE = regexp.MustCompile(`expire in (\d+) minutes?`)
 // Pair mints a one-time link on base, the URL devices use to reach the
 // server. It starts the server if it isn't running.
 func Pair(ctx context.Context, base string) (Pairing, error) {
-	return pair(ctx, "--url", base)
-}
-
-// PairRemote mints a one-time link on the OpenTunnel address. Remote access
-// must be on; the tunnel can take a while to attach after a start.
-func PairRemote(ctx context.Context) (Pairing, error) {
-	return pair(ctx, "--remote", "--yes")
-}
-
-func pair(ctx context.Context, args ...string) (Pairing, error) {
 	bin, err := cli()
 	if err != nil {
 		return Pairing{}, err
 	}
 	start := time.Now()
-	out, err := run(ctx, bin, append([]string{"pair"}, args...)...)
+	out, err := run(ctx, bin, "pair", "--url", base)
 	if err != nil {
 		return Pairing{}, err
 	}
@@ -329,10 +297,9 @@ func pair(ctx context.Context, args ...string) (Pairing, error) {
 }
 
 // LinkBase is the URL pairing links use: the one set in agentctl's config,
-// else "" when remote access is on (links use the OpenTunnel address), else
-// the address the server listens on.
+// else the address the server listens on.
 func LinkBase(configured string, st Status) string {
-	if configured != "" || st.Remote {
+	if configured != "" {
 		return configured
 	}
 	return st.URL

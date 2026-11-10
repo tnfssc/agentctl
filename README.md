@@ -47,6 +47,11 @@ Or [download a release](https://github.com/tnfssc/agentctl/releases) manually. W
 go install github.com/tnfssc/agentctl/cmd/agentctl@latest
 ```
 
+To remove it, run `agentctl uninstall`. It first lists what agentctl set up that stays behind (agents routed through a
+proxy, which stop working without it, curated settings, T3 Code's service, setups your agent did from a guide) with the
+command that undoes each, and offers to open the dashboard to undo them. Then it deletes the binary, and with
+`--purge` (or if you say yes) `~/.config/agentctl` with your proxies' keys.
+
 ## Use
 
 Run `agentctl` in a terminal for the dashboard (it also works over SSH from a phone, down to 40×16) showing where each agent is routed and which proxies work.
@@ -79,7 +84,16 @@ remote branches. Unticking an item, or "Reset to default", puts the defaults bac
 written.
 
 agentctl doesn't touch signing keys. `agentctl guide signing` prints instructions for your coding agent instead: paste
-the command into it and it walks you through the key, git and GitHub.
+the command into it and it walks you through the key, git and GitHub. Other one-time setups work the same way, each
+with an undo guide, and the dashboard shows the command to paste:
+
+- `agentctl guide memory`: one shared memory cap for every agent however it starts (T3 Code's sessions, OpenCode's
+  server, Claude Code, Codex and Pi from a terminal) and one for Docker, below the machine's RAM, plus a guarantee for
+  T3 Code's server, so a full machine slows tests down instead of freezing. Linux (systemd drop-ins and small
+  wrappers that start terminal agents in the capped slice); on macOS only Docker's VM can be capped. Undo:
+  `agentctl guide memory-undo`.
+- `agentctl guide tunnel`: reaches T3 Code and OpenCode from anywhere through a Cloudflare Tunnel on your own domain,
+  with `cloudflared`, optionally behind Cloudflare Access. Undo: `agentctl guide tunnel-undo`.
 
 Models agentctl cannot prove are non-Anthropic, and image or audio models, are hidden from Codex, OpenCode and Pi.
 Clear one you trust with `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude
@@ -118,14 +132,13 @@ agentctl opencode                    # running?, address, version, newer release
 agentctl opencode start              # start the server (it does not come back after a reboot on its own)
 agentctl opencode url https://box.your-tailnet.ts.net   # the address other devices use, once
 agentctl opencode pair               # one-time link and QR code; a device stays signed in for 30 days
-agentctl opencode remote on          # reach it from the internet over OpenTunnel; links then use that address
 agentctl opencode signout            # new server password: signs out every paired device
 agentctl opencode update             # opencode upgrade, then restart the server
 agentctl opencode restart | stop
 ```
 
-The server listens on 127.0.0.1; put something like Tailscale Serve in front of it, or turn on OpenTunnel, for other
-devices.
+The server listens on 127.0.0.1; put something like Tailscale Serve or a Cloudflare Tunnel (`agentctl guide tunnel`)
+in front of it for other devices.
 
 ## Develop
 

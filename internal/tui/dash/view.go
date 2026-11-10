@@ -213,7 +213,7 @@ var hintTexts = map[dialog]string{
 	pairFormDialog: "tab next · enter submit · esc",
 	pairDialog:     "select the link · c copy · enter done",
 	serviceDialog:  "↑↓ · enter choose · esc back",
-	signingDialog:  "c copy · enter done",
+	guideDialog:    "c copy · u copy undo · enter",
 	allowDialog:    "space toggle · y save · esc",
 }
 
@@ -227,8 +227,10 @@ var maxHintWidth = func() int {
 
 func (m Model) hints() string {
 	switch {
-	case m.dialog == signingDialog && m.remote:
+	case m.dialog == guideDialog && m.remote:
 		return "enter done" // no clipboard over SSH
+	case m.dialog == guideDialog && m.guideUndo() == "":
+		return "c copy · enter done"
 	case m.compact() && m.dialog == noDialog && m.page == pageDetail:
 		return "1-3 buttons · esc back"
 	case m.compact() && m.dialog == noDialog:
@@ -301,6 +303,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.gitDetail(p)
 	case "self":
 		return m.selfDetail(p)
+	case "memory":
+		return m.memoryDetail(p)
 	case "behavior":
 		path, _ := tune.InstructionsPath()
 		d := detailView{
@@ -623,8 +627,8 @@ func (m Model) drawDialog(sc *scene) {
 		m.drawPairForm(sc)
 	case pairDialog:
 		m.drawPairing(sc)
-	case signingDialog:
-		m.drawSigning(sc)
+	case guideDialog:
+		m.drawGuide(sc)
 	case allowDialog:
 		m.drawAllow(sc)
 	case serviceDialog:

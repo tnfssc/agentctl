@@ -87,31 +87,3 @@ func TestUseOpenCodeTurnsOnClaudeAgent(t *testing.T) {
 		t.Fatalf("logins = %d, output:\n%s", logins, out)
 	}
 }
-
-func TestOpenCodeRemote(t *testing.T) {
-	testutil.OpenCode(t, testutil.Home(t))
-	if _, err := execute(t, "opencode", "pair", "--remote"); err == nil {
-		t.Fatal("--remote needs remote access on")
-	}
-	if _, err := execute(t, "opencode", "remote", "on"); err == nil {
-		t.Fatal("turning remote access on without a terminal needs --yes")
-	}
-	must(t, "opencode", "remote", "on", "--yes")
-	if out := must(t, "opencode"); !strings.Contains(out, "remote   on") || !strings.Contains(out, "pair at  the OpenTunnel address") {
-		t.Fatalf("status:\n%s", out)
-	}
-	// With remote on and no address set, links go through the tunnel.
-	out := must(t, "opencode", "pair")
-	if !strings.Contains(out, "https://0123456789abcdef.t.opentunnel.dev/auth/connect/") || strings.Contains(out, "only works on this machine") {
-		t.Fatalf("pair:\n%s", out)
-	}
-	// An address the user set wins.
-	must(t, "opencode", "url", "https://box.example.ts.net")
-	if out = must(t, "opencode", "pair"); !strings.Contains(out, "https://box.example.ts.net/auth/connect/") {
-		t.Fatalf("pair with an address:\n%s", out)
-	}
-	must(t, "opencode", "remote", "off", "--yes")
-	if out = must(t, "opencode", "remote"); !strings.Contains(out, "off") {
-		t.Fatalf("remote:\n%s", out)
-	}
-}

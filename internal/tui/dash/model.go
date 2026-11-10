@@ -24,7 +24,6 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/opencode"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
-	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/selfupdate"
@@ -52,7 +51,7 @@ const (
 	pairFormDialog        // name and address for a new pairing link
 	pairDialog            // the new pairing link and its QR code
 	serviceDialog         // T3 Code's service or OpenCode's server menu
-	signingDialog         // how to set up commit signing with an agent
+	guideDialog           // the command that hands a setup guide to an agent
 	allowDialog           // which unverified models of a proxy every agent may use
 )
 
@@ -139,6 +138,9 @@ type Model struct {
 	tuneWant  map[string]bool
 
 	allowWant map[string]bool // allowDialog's ticks by model id
+
+	guide   string   // guideDialog's topic
+	applied []string // guides whose setup is on record
 
 	version     string
 	exe         string // the running binary, which an update replaces
@@ -341,7 +343,7 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	}
 	first := !m.loaded
 	m.cfg, m.st, m.statuses, m.loaded = msg.cfg, msg.st, msg.statuses, true
-	m.signed, m.signingKey = msg.signed, msg.signingKey
+	m.signed, m.signingKey, m.applied = msg.signed, msg.signingKey, msg.applied
 	m.focus = min(m.focus, len(m.homeIDs())-1)
 	if !first {
 		return m, nil
@@ -367,7 +369,7 @@ func (m Model) homeIDs() []string {
 	for _, s := range m.statuses {
 		ids = append(ids, "agent:"+s.agent.Name)
 	}
-	ids = append(ids, "t3", "opencode", "behavior", "git", "self")
+	ids = append(ids, "t3", "opencode", "behavior", "git", "memory", "self")
 	for _, n := range m.cfg.Names() {
 		ids = append(ids, "proxy:"+n)
 	}
@@ -442,9 +444,10 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m.act("tune:" + tune.Instructions)
 	case "git":
 		return m.act("tune:" + tune.Git)
-	case "signing":
-		m.dialog = signingDialog
-		return m, nil
+	case "memory":
+		return m.act("guide:memory")
+	case "guide":
+		return m.openGuide(arg), nil
 	case "t3":
 		// Opening the row presses its primary button.
 		for _, b := range m.t3Detail(m.pal).buttons {
@@ -522,8 +525,9 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		m.toast, m.toastErr = "Copied the link", false
 		return m, tea.SetClipboard(m.pairing.URL)
 	case "copy-guide":
-		m.toast, m.toastErr = "Copied; paste it into your coding agent", false
-		return m, tea.SetClipboard(guide.Command("signing"))
+		return m.copyGuide(m.guide)
+	case "copy-undo":
+		return m.copyGuide(m.guideUndo())
 	case "back":
 		return m.openRoutes(m.statusOf(m.req.Agent))
 	case "opt":
@@ -728,12 +732,12 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.close("", false), nil
 		}
 		return m, nil
-	case signingDialog:
+	case guideDialog:
 		switch k {
 		case "c":
-			if !m.remote {
-				return m.actDialog("copy-guide")
-			}
+			return m.actDialog("copy-guide")
+		case "u":
+			return m.actDialog("copy-undo")
 		case "enter", "esc", "q":
 			return m.close("", false), nil
 		}

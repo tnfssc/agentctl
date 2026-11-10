@@ -243,18 +243,18 @@ func idx(m Model, id string) int {
 func TestSigningShowsTheCommandAndCopiesOnlyLocally(t *testing.T) {
 	m := base(t, 120, 40)
 	m.focus = idx(m, "git")
-	if d := m.gitDetail(m.pal); d.buttons[1].id != "signing" {
+	if d := m.gitDetail(m.pal); d.buttons[1].id != "guide:signing" {
 		t.Fatalf("git pane buttons = %+v", d.buttons)
 	}
-	open := send(t, m, click("signing"))
-	if open.dialog != signingDialog || !strings.Contains(open.View().Content, "agentctl guide signing") {
+	open := send(t, m, click("guide:signing"))
+	if open.dialog != guideDialog || !strings.Contains(open.View().Content, "agentctl guide signing") {
 		t.Fatal("the signing dialog should show the command to paste into an agent")
 	}
 	if _, ok := rectsOf(open)["m:copy-guide"]; !ok {
 		t.Fatal("local sessions get a copy button")
 	}
 	m.remote = true
-	remote := send(t, m, click("signing"))
+	remote := send(t, m, click("guide:signing"))
 	if _, ok := rectsOf(remote)["m:copy-guide"]; ok || remote.hints() != "enter done" {
 		t.Fatal("over SSH there is no clipboard: no copy button, no copy hint")
 	}

@@ -12,10 +12,11 @@ func newGuideCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "guide [<topic>]",
 		Short: "Print setup instructions for your coding agent to follow",
-		Long: "Prints instructions written for a coding agent, for setups agentctl leaves to you, such as commit\n" +
-			"signing keys. Paste the command into your agent (e.g. `run agentctl guide signing`) and it walks you\n" +
-			"through the steps.",
-		Example:   "  agentctl guide signing",
+		Long: "Prints instructions written for a coding agent, for setups agentctl leaves to you: commit signing\n" +
+			"keys, memory limits for agents and Docker, a Cloudflare Tunnel to T3 Code and OpenCode. Paste the\n" +
+			"command into your agent (e.g. `run agentctl guide signing`) and it walks you through the steps.\n" +
+			"Setups that change the machine have an undo guide, `<topic>-undo`.",
+		Example:   "  agentctl guide memory\n  agentctl guide tunnel-undo",
 		Args:      cobra.MaximumNArgs(1),
 		ValidArgs: guide.Topics(),
 		RunE: func(cmd *cobra.Command, args []string) error {

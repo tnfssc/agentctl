@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/url"
-	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -46,8 +45,7 @@ func ocStep(ctx context.Context, done string, step func(context.Context, io.Writ
 }
 
 // ocPair mints a link and remembers base as the link address when it
-// differs from where the server listens. An empty base means the OpenTunnel
-// address, and forgets any address set before.
+// differs from where the server listens.
 func ocPair(ctx context.Context, base, listen string) tea.Cmd {
 	return func() tea.Msg {
 		cfg, err := config.Load()
@@ -64,11 +62,7 @@ func ocPair(ctx context.Context, base, listen string) tea.Cmd {
 				return pairedMsg{err: err}
 			}
 		}
-		pair := func() (ocweb.Pairing, error) { return ocweb.Pair(ctx, base) }
-		if base == "" {
-			pair = func() (ocweb.Pairing, error) { return ocweb.PairRemote(ctx) }
-		}
-		p, err := pair()
+		p, err := ocweb.Pair(ctx, base)
 		return pairedMsg{pairing: t3.Pairing(p), err: err}
 	}
 }
@@ -168,21 +162,14 @@ func (m Model) ocDetail(p skin.Palette) detailView {
 		d.facts[2] = fact(p, "serving", st.Serving+" · restart to run "+st.Version)
 	}
 	if st.URL != "" {
-		listen := st.URL
-		if st.Remote {
-			listen += " · internet on (OpenTunnel)"
-		}
-		d.facts[3] = fact(p, "listen", listen)
+		d.facts[3] = fact(p, "listen", st.URL)
 	}
-	switch base := m.ocLinkBase(); {
-	case base != "":
+	if base := m.ocLinkBase(); base != "" {
 		where := base
 		if t3.LocalOnly(base) {
 			where += " (this machine only)"
 		}
 		d.facts[4] = fact(p, "pair at", where)
-	case st.Remote:
-		d.facts[4] = fact(p, "pair at", "the OpenTunnel address")
 	}
 	return d
 }
@@ -191,14 +178,10 @@ var ocServerButton = button{"Server", "oc-server", false}
 
 // ocServerOptions are the server menu's actions, in order.
 func (m Model) ocServerOptions() []option {
-	remote := option{label: "Internet access", detail: "off · turn on OpenTunnel", value: "oc-remote"}
-	if m.oc.Remote {
-		remote.detail = "on over OpenTunnel · turn off"
-	}
 	return []option{
 		{label: "Restart", detail: "stops running agent turns", value: "oc-restart"},
 		{label: "Update", detail: "opencode upgrade, then restart", value: "oc-update"},
-		remote,
+		{label: "Internet access", detail: "Cloudflare Tunnel · a guide for your agent", value: "guide:tunnel"},
 		{label: "Sign out devices", detail: "every paired browser and app", value: "oc-signout"},
 		{label: "Stop", detail: "until an opencode command starts it", value: "oc-stop"},
 	}
@@ -242,27 +225,6 @@ func (m Model) actOC(verb string) (tea.Model, tea.Cmd) {
 			body:    "Running agent turns stop, and the web app goes offline until an opencode command or Start runs it again.",
 			button:  "Stop", busy: "Stopping OpenCode", run: ocStep(m.ctx, "OpenCode's server stopped", ocweb.Stop),
 		}), nil
-	case "oc-remote":
-		if m.oc.Remote {
-			return m.askOC(askSpec{
-				heading: "Turn off internet access?",
-				body: "The OpenTunnel address, and links made for it, stop working. The server restarts, which " +
-					"stops running agent turns.",
-				button: "Turn off", busy: "Turning off internet access",
-				run: ocStep(m.ctx, "Internet access is off", func(ctx context.Context, out io.Writer) error {
-					return ocweb.SetRemote(ctx, out, false)
-				}),
-			}), nil
-		}
-		return m.askOC(askSpec{
-			heading: "Reach OpenCode from the internet?",
-			body: ocweb.RemoteWarning + " Pairing links then use the OpenTunnel address unless you set one. The " +
-				"server restarts; the first time, setting up the tunnel can take a minute.",
-			button: "Turn on", busy: "Turning on internet access",
-			run: ocStep(m.ctx, "Internet access is on; pair a device to use it", func(ctx context.Context, out io.Writer) error {
-				return ocweb.SetRemote(ctx, out, true)
-			}),
-		}), nil
 	case "oc-server":
 		m.options, m.pick, m.top = m.ocServerOptions(), 0, 0
 		m.dialog = serviceDialog
@@ -282,9 +244,6 @@ func (m Model) askOC(a askSpec) Model {
 func (m Model) openOCPairForm() (tea.Model, tea.Cmd) {
 	in := textinput.New()
 	in.Placeholder = "https://this-machine.your-tailnet.ts.net"
-	if m.oc.Remote {
-		in.Placeholder = "empty for the OpenTunnel address"
-	}
 	in.Prompt = ""
 	in.SetStyles(textinput.DefaultStyles(m.pal.IsDark))
 	in.SetValue(m.ocLinkBase())
@@ -296,11 +255,6 @@ func (m Model) openOCPairForm() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) submitOCPair() (tea.Model, tea.Cmd) {
-	if strings.TrimSpace(m.inputs[0].Value()) == "" && m.oc.Remote {
-		m.formErr = ""
-		m.busy = "Making a pairing link"
-		return m, ocPair(m.ctx, "", m.oc.URL)
-	}
 	base, err := t3.NormalizeURL(m.inputs[0].Value())
 	if err != nil {
 		m.formErr = err.Error()

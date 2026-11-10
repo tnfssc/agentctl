@@ -8,6 +8,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
+	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/tune"
 )
@@ -21,6 +22,7 @@ type (
 		statuses   []agentStatus
 		signed     bool
 		signingKey string
+		applied    []string // guides whose setup is on record
 		err        error
 	}
 	probedMsg struct {
@@ -83,6 +85,7 @@ func load() tea.Msg {
 	}
 	msg := loadedMsg{cfg: cfg, st: st}
 	msg.signed, msg.signingKey = tune.SigningStatus()
+	msg.applied = guide.Applied()
 	for _, a := range app.Agents {
 		s, err := a.Status(cfg)
 		msg.statuses = append(msg.statuses, agentStatus{agent: a, status: s, err: err})

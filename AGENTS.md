@@ -55,7 +55,7 @@ must keep this; tests in `internal/tui/dash` check it.
 ## Dashboard
 
 Everything the CLI can do, the dashboard can do too; a feature isn't done until both have it. Plumbing that only
-agents or shells call (`token`, `completion`) is the exception.
+agents or shells call (`token`, `completion`) and `uninstall` (the user's call) are the exceptions.
 
 Bare `agentctl` opens a small dashboard (`internal/tui/dash`, look in `internal/tui/skin`, after voidzero.dev):
 hairlines, a sidebar, a detail pane, outlined buttons, mouse click/hover/wheel via `View().OnMouse` and compositor

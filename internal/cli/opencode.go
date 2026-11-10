@@ -44,7 +44,7 @@ func newOpenCodeCmd() *cobra.Command {
 		newOpenCodeUpdateCmd(),
 		newOpenCodeStepCmd("signout", "Sign out every paired browser and app",
 			"Sign out every paired browser and app?", signOutNote, "Signed out every paired device", ocweb.SignOutAll),
-		newOpenCodePairCmd(), newOpenCodeURLCmd(), newOpenCodeRemoteCmd(),
+		newOpenCodePairCmd(), newOpenCodeURLCmd(),
 	)
 	return cmd
 }
@@ -87,14 +87,8 @@ func printOpenCodeStatus(cmd *cobra.Command) error {
 	if st.Serving != "" {
 		row("serving", st.Serving+u.s.Subtle.Render(" · restart to run "+st.Version))
 	}
-	if st.Remote {
-		row("remote", "on · reachable from the internet over OpenTunnel")
-	}
-	switch base := ocweb.LinkBase(cfg.OpenCode.URL, st); {
-	case base != "":
+	if base := ocweb.LinkBase(cfg.OpenCode.URL, st); base != "" {
 		row("pair at", base)
-	case st.Remote:
-		row("pair at", "the OpenTunnel address")
 	}
 	return nil
 }
@@ -184,18 +178,14 @@ func openCodeUsable(st ocweb.Status) error {
 }
 
 func newOpenCodePairCmd() *cobra.Command {
-	var (
-		base   string
-		remote bool
-	)
+	var base string
 	cmd := &cobra.Command{
 		Use:   "pair",
 		Short: "Make a one-time link that signs in a browser or app",
 		Long: "Prints a one-time link and its QR code; open it on the new device to use OpenCode's web app.\n" +
 			"Each device needs its own link, and stays signed in for 30 days. Starts the server if it is stopped.",
 		Example: `  agentctl opencode pair
-  agentctl opencode pair --url https://box.tailnet.ts.net
-  agentctl opencode pair --remote`,
+  agentctl opencode pair --url https://box.tailnet.ts.net`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			u := newUI(cmd)
@@ -210,31 +200,20 @@ func newOpenCodePairCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if remote && base != "" {
-				return errors.New("--remote cannot be combined with --url")
-			}
-			if base == "" && !remote {
+			if base == "" {
 				base = ocweb.LinkBase(cfg.OpenCode.URL, st)
-				remote = base == "" && st.Remote
 			}
-			var p ocweb.Pairing
-			switch {
-			case remote:
-				if !st.Remote {
-					return errors.New("remote access is off; turn it on with `agentctl opencode remote on`")
-				}
-				p, err = ocweb.PairRemote(cmd.Context())
-			case base == "":
+			if base == "" {
 				return errors.New("no address for the link: the server isn't running; start it with `agentctl opencode start`, or pass --url")
-			default:
-				if base, err = t3.NormalizeURL(base); err == nil {
-					p, err = ocweb.Pair(cmd.Context(), base)
-				}
 			}
+			if base, err = t3.NormalizeURL(base); err != nil {
+				return err
+			}
+			p, err := ocweb.Pair(cmd.Context(), base)
 			if err != nil {
 				return err
 			}
-			if !remote && t3.LocalOnly(base) {
+			if t3.LocalOnly(base) {
 				u.warn("this link only works on this machine; set the address devices use with `agentctl opencode url <url>`")
 			}
 			// Drawn in color only; see `agentctl t3 pair`.
@@ -249,65 +228,6 @@ func newOpenCodePairCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&base, "url", "", "address devices use to reach the server (default: `agentctl opencode url`)")
-	cmd.Flags().BoolVar(&remote, "remote", false, "link through the OpenTunnel address (needs `agentctl opencode remote on`)")
-	return cmd
-}
-
-func newOpenCodeRemoteCmd() *cobra.Command {
-	var yes bool
-	cmd := &cobra.Command{
-		Use:   "remote [on|off]",
-		Short: "Show, or turn on or off, access from the internet over OpenTunnel",
-		Long: "OpenCode can reach the server from anywhere through OpenTunnel, at an unguessable address; links from\n" +
-			"`agentctl opencode pair` then use it unless `agentctl opencode url` is set. Turning it on or off restarts\n" +
-			"the server; the first time on, OpenCode sets up this machine's tunnel, which can take a minute.",
-		Example: `  agentctl opencode remote on
-  agentctl opencode remote off`,
-		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: []string{"on", "off"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			u := newUI(cmd)
-			st, err := ocweb.Inspect(cmd.Context())
-			if err != nil {
-				return err
-			}
-			if err := openCodeUsable(st); err != nil {
-				return err
-			}
-			if len(args) == 0 {
-				if st.Remote {
-					u.println("on · reachable from the internet over OpenTunnel")
-				} else {
-					u.println(u.s.Subtle.Render("off · only addresses that reach this machine work"))
-				}
-				return nil
-			}
-			on := args[0] == "on"
-			if !on && args[0] != "off" {
-				return fmt.Errorf("want on or off, not %q", args[0])
-			}
-			if on == st.Remote {
-				u.ok("remote access is already " + args[0])
-				return nil
-			}
-			if !yes {
-				what, note := "Turn on remote access?", ocweb.RemoteWarning+" The server restarts, which stops running agent turns."
-				if !on {
-					what, note = "Turn off remote access?", "Devices paired over OpenTunnel lose access. The server restarts, which stops running agent turns."
-				}
-				ok, err := u.confirm(what, note)
-				if err != nil || !ok {
-					return err
-				}
-			}
-			if err := ocweb.SetRemote(cmd.Context(), u.err, on); err != nil {
-				return err
-			}
-			u.ok("remote access is " + args[0])
-			return nil
-		},
-	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "change it without asking")
 	return cmd
 }
 

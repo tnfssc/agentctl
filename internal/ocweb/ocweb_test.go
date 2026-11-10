@@ -75,7 +75,7 @@ func TestStepsAndErrors(t *testing.T) {
 	if err := ocweb.Update(ctx, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"service unset password", "service start", "service get remote", "service status", "upgrade", "service restart"}
+	want := []string{"service unset password", "service start", "service status", "upgrade", "service restart"}
 	if got := f.Calls(t); !slices.Equal(got, want) {
 		t.Fatalf("calls = %v, want %v", got, want)
 	}
@@ -103,39 +103,6 @@ func TestStepsAndErrors(t *testing.T) {
 	t.Setenv("PATH", "/nonexistent")
 	if err := ocweb.Start(ctx, &out); !errors.Is(err, ocweb.ErrNotInstalled) {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestRemoteAccess(t *testing.T) {
-	ctx := context.Background()
-	f := testutil.OpenCode(t, testutil.Home(t))
-	if _, err := ocweb.PairRemote(ctx); err == nil {
-		t.Fatal("pairing remotely needs remote access on")
-	}
-	var out strings.Builder
-	if err := ocweb.SetRemote(ctx, &out, true); err != nil {
-		t.Fatal(err)
-	}
-	st, err := ocweb.Inspect(ctx)
-	if err != nil || !st.Remote || !st.Running {
-		t.Fatalf("after turning remote on: %+v %v", st, err)
-	}
-	// Remote on and no address of the user's: links use the tunnel.
-	if base := ocweb.LinkBase("", st); base != "" {
-		t.Fatalf("link base = %q", base)
-	}
-	p, err := ocweb.PairRemote(ctx)
-	if err != nil || !strings.HasPrefix(p.URL, "https://0123456789abcdef.t.opentunnel.dev/auth/connect/") {
-		t.Fatalf("remote link %q %v", p.URL, err)
-	}
-	if err := ocweb.SetRemote(ctx, &out, false); err != nil {
-		t.Fatal(err)
-	}
-	if st, _ = ocweb.Inspect(ctx); st.Remote || ocweb.LinkBase("", st) != st.URL {
-		t.Fatalf("after turning remote off: %+v", st)
-	}
-	if calls := f.Calls(t); !slices.Contains(calls, "service set remote true") || !slices.Contains(calls, "service unset remote") {
-		t.Fatalf("calls = %v", calls)
 	}
 }
 

@@ -289,6 +289,7 @@ var serviceOptions = []option{
 	{label: "Restart", detail: "stops running agent turns", value: "t3-restart"},
 	{label: "Repair", detail: "reinstall the service", value: "t3-repair"},
 	{label: "Uninstall", detail: "projects and threads stay", value: "t3-uninstall"},
+	{label: "Internet access", detail: "Cloudflare Tunnel · a guide for your agent", value: "guide:tunnel"},
 }
 
 // actT3 handles the T3 Code buttons on the home screen.

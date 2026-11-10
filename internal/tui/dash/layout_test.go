@@ -111,6 +111,13 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = strings.Repeat("something failed ", 20), true
 		states = append(states, state{"busy", busy}, state{"toast", toast})
+		for _, applied := range [][]string{nil, {"memory"}} {
+			s := m
+			s.applied = applied
+			s = focusOn(s, "memory")
+			s.page = pageDetail
+			states = append(states, state{fmt.Sprintf("memory %v", applied), s})
+		}
 		for _, c := range []struct {
 			name    string
 			version string
@@ -141,7 +148,7 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		}
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
-			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions", "self-update"},
+			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions", "self-update", "guide:memory"},
 			{"local:codex", "refresh", "self-check"},
 			{"tune:claude", "tune:codex", "rm:spark"},
 		} {
@@ -263,13 +270,20 @@ func dialogStates(t *testing.T, m Model) []state {
 		}
 		add(fmt.Sprintf("devices %d scrolled", n), dev)
 	}
-	add("signing", send(t, m, click("signing")))
+	add("signing", send(t, m, click("guide:signing")))
 	remote := m
 	remote.remote = true
-	add("signing over ssh", send(t, remote, click("signing")))
+	add("signing over ssh", send(t, remote, click("guide:signing")))
 	signed := m
 	signed.signed, signed.signingKey = true, "~/.ssh/id_ed25519_signing.pub"
-	add("signing done", send(t, signed, click("signing")))
+	add("signing done", send(t, signed, click("guide:signing")))
+	add("guide memory", send(t, m, click("guide:memory")))
+	tunnel := send(t, m, click("guide:tunnel"))
+	tunnel.applied = []string{"tunnel"}
+	add("guide tunnel set up", tunnel)
+	remoteTunnel := tunnel
+	remoteTunnel.remote = true
+	add("guide tunnel set up over ssh", remoteTunnel)
 	svc := m
 	svc.t3, svc.t3Loaded = t3States()["running"].st, true
 	add("service", send(t, svc, click("t3-service")))

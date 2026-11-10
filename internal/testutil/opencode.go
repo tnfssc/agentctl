@@ -43,7 +43,6 @@ func OpenCode(t *testing.T, home string) *FakeOpenCode {
 	write(t, filepath.Join(bin, "opencode"), strings.NewReplacer("@DIR@", f.Dir).Replace(fakeOpenCodeScript), 0o755)
 	f.Write(t, "version", "opencode v"+OpenCodeVersion)
 	f.Write(t, "url", "http://127.0.0.1:49374")
-	f.Write(t, "remote", "false")
 	f.Write(t, "auth", "OpenAI          OAuth                       stored\n")
 	f.Register(t, OpenCodeVersion)
 	return f
@@ -67,8 +66,7 @@ func (f *FakeOpenCode) Calls(t *testing.T) []string {
 }
 
 // Write replaces one piece of state: "version" (what --version prints),
-// "url" (empty means stopped), "remote" ("true" when remote access is on),
-// "auth" (what `auth list` prints), or "fail", which makes every call but
+// "url" (empty means stopped), "auth" (what `auth list` prints), or "fail", which makes every call but
 // --version fail with that message, printed the way opencode prints errors.
 func (f *FakeOpenCode) Write(t *testing.T, name, content string) {
 	t.Helper()
@@ -90,9 +88,6 @@ case "$*" in
   echo "http://127.0.0.1:49374" > @DIR@/url
   cat @DIR@/url ;;
 "service stop"|"service unset password") : > @DIR@/url ;;
-"service get remote") cat @DIR@/remote ;;
-"service set remote true") : > @DIR@/url; echo true > @DIR@/remote ;;
-"service unset remote") : > @DIR@/url; echo false > @DIR@/remote ;;
 "auth list") cat @DIR@/auth ;;
 "auth login claude-agent --method claude-login")
   echo "Claude Agent    Claude Agent                stored" >> @DIR@/auth
@@ -101,10 +96,6 @@ case "$*" in
 "pair --url "*)
   echo "http://127.0.0.1:49374" > @DIR@/url
   printf '\n  Open a link to connect. Links work once and expire in 5 minutes.\n\n  %s/auth/connect/CODE22CHARSxxxxxxxxxxx\n\n  ▄▄▄ qr\n\n' "$3" ;;
-"pair --remote --yes")
-  [ "$(cat @DIR@/remote)" = true ] || { echo "Error: remote access is off" >&2; exit 1; }
-  echo "http://127.0.0.1:49374" > @DIR@/url
-  printf '\n  Open a link to connect. Links work once and expire in 5 minutes.\n\n  https://0123456789abcdef.t.opentunnel.dev/auth/connect/CODE22CHARSxxxxxxxxxxx\n\n' ;;
 *) echo "fake opencode: unexpected $*" >&2; exit 1 ;;
 esac
 `

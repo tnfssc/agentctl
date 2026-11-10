@@ -39,6 +39,7 @@ func (m Model) navEntries(p skin.Palette) []navEntry {
 		serverEntry(p, "opencode", "OpenCode web", m.ocState(), m.ocNavDetail()),
 		navEntry{id: "behavior", section: "Behavior", icon: "◇", label: "Instructions", detail: "all agents"},
 		navEntry{id: "git", section: "Behavior", icon: "◇", label: "Git", detail: m.signingState()},
+		navEntry{id: "memory", section: "Behavior", icon: "◇", label: "Memory", detail: m.memoryState()},
 		m.selfEntry(p),
 	)
 	for _, n := range m.cfg.Names() {

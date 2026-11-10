@@ -121,29 +121,6 @@ func TestOpenCodePairingClosesOnDone(t *testing.T) {
 	}
 }
 
-func TestOpenCodeRemoteToggleAndPairing(t *testing.T) {
-	m := focusOn(send(t, base(t, 120, 40), ocStates()["running"]), "opencode")
-	m = send(t, m, click("oc-server"), click("m:opt:2"))
-	if m.dialog != askDialog || m.ask.button != "Turn on" || !strings.Contains(m.ask.body, "internet") {
-		t.Fatalf("turning internet access on should warn first: %+v", m.ask)
-	}
-	m = send(t, m, keyPress("esc"))
-
-	remote := ocStates()["running"]
-	remote.st.Remote = true
-	m = send(t, m, remote, click("oc-server"))
-	if !strings.Contains(m.options[2].detail, "on over OpenTunnel") {
-		t.Fatalf("menu should show internet access on: %+v", m.options[2])
-	}
-	m = send(t, m, keyPress("esc"), click("oc-pair"))
-	if m.inputs[0].Value() != "" || !strings.Contains(m.inputs[0].Placeholder, "OpenTunnel") {
-		t.Fatalf("with internet access on, the form defaults to the tunnel: %q", m.inputs[0].Value())
-	}
-	if m = send(t, m, keyPress("enter")); m.busy != "Making a pairing link" || m.formErr != "" {
-		t.Fatalf("an empty address pairs over the tunnel: busy %q err %q", m.busy, m.formErr)
-	}
-}
-
 func TestPairingLeavesTheMouseToTheTerminal(t *testing.T) {
 	m := send(t, base(t, 40, 16), ocStates()["running"])
 	if m.View().MouseMode == tea.MouseModeNone {
