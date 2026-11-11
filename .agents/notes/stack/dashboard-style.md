@@ -16,3 +16,7 @@ The user pointed at voidzero.dev; then asked to stop overdoing it and keep thing
   Test is on each proxy, Refresh models replaced the proxy page's Details button (the row opens details), keys a/t/r/q
   still work. Sidebar: T3 Code and OpenCode web moved from Agents to a Servers section, with status dots like proxies
   (green running, amber busy/wants attention, red error, hollow not running); Agents holds only the coding agents.
+- 2026-11-11, user: rethink the sidebar (five sections for eleven items, groups ran together, mixed icons, agent
+  rows repeating "→ minipc · gpt-6.1-sol"). Now four groups with a blank row before each header: Agents (route only;
+  the model is on the agent's page), Servers, Proxies (ending with Add a proxy, no longer pinned), Settings
+  (Instructions, Git, Memory, agentctl's updates). A status dot only on items with a live state.

@@ -77,7 +77,7 @@ func (m Model) selfState() string {
 
 func (m Model) selfEntry(p skin.Palette) navEntry {
 	state := m.selfState()
-	e := navEntry{id: "self", section: "agentctl", icon: "●", label: "Updates", detail: m.version + " · " + state}
+	e := navEntry{id: "self", section: "Settings", icon: "●", label: "agentctl", detail: m.version + " · " + state}
 	switch state {
 	case "latest":
 		e.dot = p.Green
@@ -92,7 +92,7 @@ func (m Model) selfEntry(p skin.Palette) navEntry {
 }
 
 func (m Model) selfDetail(p skin.Palette) detailView {
-	d := detailView{label: "agentctl · updates"}
+	d := detailView{label: "Settings · agentctl"}
 	// Check again keeps the second slot whatever the state, so it never moves.
 	check := button{"Check again", "self-check", false}
 	switch state := m.selfState(); state {

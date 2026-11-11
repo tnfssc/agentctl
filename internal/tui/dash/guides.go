@@ -55,7 +55,7 @@ func (m Model) setUp(topic string) bool { return slices.Contains(m.applied, topi
 // every agent on the machine, not to one server.
 func (m Model) memoryDetail(p skin.Palette) detailView {
 	d := detailView{
-		label:   "Behavior · this machine",
+		label:   "Settings · this machine",
 		heading: "Memory limits for agents",
 		body: "One shared cap for every agent, however it starts (T3 Code, OpenCode, Claude Code, Codex, Pi), " +
 			"and one for Docker, so a full machine slows tests down instead of freezing. Your coding agent sets it up.",

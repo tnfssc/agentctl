@@ -13,8 +13,8 @@ the wide one; 40×16 minimum; bigger touch targets everywhere, not only on phone
   layouts. Dialogs fill the page with three equal button slots; long labels swap for short ones (`fit`). Forms use
   one-row inputs, label and input on one row when even that doesn't fit; the choice is the same for every form.
   Facts win over description rows on small pages because they hold what changes (a proxy's error).
-- The home list (sidebar in wide, whole page in compact) has two-row items, a scrolling window, a reserved "more"
-  row that pages through the list when tapped (not every phone terminal sends swipes as wheel events), and "Add a
-  proxy" pinned below.
+- The home list (sidebar in wide, whole page in compact) has two-row items, a scrolling window, and a reserved
+  "more" row that pages through the list when tapped (not every phone terminal sends swipes as wheel events). "Add a
+  proxy" was pinned below until 2026-11-11; it now ends the Proxies group (see dashboard-style.md).
 - No-layout-shift with scrolling: the frame (window, more row, pinned item, footer, button slots) never moves;
   items move only when a new selection scrolls the list, and tests compare item positions per selection.

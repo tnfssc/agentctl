@@ -66,7 +66,7 @@ func (m Model) drawCompactDetail(sc *scene, p skin.Palette) {
 	c := m.content()
 	d := m.detail(p)
 	backW := 10
-	sc.add(p.Button("‹ Back", backW, false, m.hover == "back"), 1, c.Y, 2, "back")
+	sc.add(m.button(p, button{"‹ Back", "back", false}, backW), 1, c.Y, 2, "back")
 	textX := 1 + backW + 2
 	textW := max(1, m.width-textX-1)
 	sc.add(skin.Cell(p.Label(d.label), textW), textX, c.Y+1, 2, "")
@@ -79,7 +79,7 @@ func (m Model) drawCompactDetail(sc *scene, p skin.Palette) {
 	slots := [3]rect{{1, btnTop, w, 3}, {1, btnTop + 3, half, 3}, {1 + half + 1, btnTop + 3, w - half - 1, 3}}
 	for i, b := range d.buttons {
 		if b.label != "" {
-			sc.add(p.Button(fit(b.label, slots[i].W), slots[i].W, b.primary, m.hover == b.id), slots[i].X, slots[i].Y, 2, b.id)
+			sc.add(m.button(p, button{fit(b.label, slots[i].W), b.id, b.primary}, slots[i].W), slots[i].X, slots[i].Y, 2, b.id)
 		}
 	}
 

@@ -417,6 +417,7 @@ func (m Model) openPairForm() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) submitPair() (tea.Model, tea.Cmd) {
+	m.pressed = "m:submit-pair"
 	if m.svc == svcOpenCode {
 		return m.submitOCPair()
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +112,10 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		toast := m
 		toast.toast, toast.toastErr = strings.Repeat("something failed ", 20), true
 		states = append(states, state{"busy", busy}, state{"toast", toast})
+		refreshing, _ := focusOn(send(t, m, probedMsg{name: "spark", probe: live(false)}), "proxy:spark").act("refresh")
+		r := refreshing.(Model)
+		r.page = pageDetail
+		states = append(states, state{"refreshing", r})
 		for _, applied := range [][]string{nil, {"memory"}} {
 			s := m
 			s.applied = applied
@@ -140,11 +145,11 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		}
 
 		// The frame never moves, whatever is selected.
-		sameRects(t, states, "status", "hints", "more", "nav:add",
+		sameRects(t, states, "status", "hints", "more",
 			"fact:0", "fact:1", "fact:2", "fact:3", "fact:4", "back")
 		// Items move only when a new selection scrolls the list.
 		for _, group := range byFocus {
-			sameRects(t, group, "nav:agent:claude", "nav:agent:codex", "nav:t3", "nav:behavior", "nav:git", "nav:proxy:spark")
+			sameRects(t, group, "nav:agent:claude", "nav:agent:codex", "nav:t3", "nav:behavior", "nav:git", "nav:proxy:spark", "nav:add")
 		}
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
@@ -236,7 +241,10 @@ func dialogStates(t *testing.T, m Model) []state {
 	add("allow many scrolled", allowMany)
 	self := m
 	self.version = "v1.4.0"
-	add("ask self", send(t, self, selfCheckedMsg{latest: "v1.5.0"}, click("self-update")))
+	askSelf := send(t, self, selfCheckedMsg{latest: "v1.5.0"}, click("self-update"))
+	add("ask self", askSelf)
+	add("ask self busy", send(t, askSelf, keyPress("y")))
+	add("allow busy", send(t, allow, keyPress("space"), keyPress("y")))
 	add("remove", send(t, m, click("rm:spark")))
 	inUse := loaded()
 	inUse.statuses[1].status.Route = "spark"
@@ -387,19 +395,33 @@ func TestSidebarStaysInItsArea(t *testing.T) {
 	}
 }
 
-func TestAddRowIsFixedWhateverTheProxyCount(t *testing.T) {
-	for _, sz := range sizes {
-		var states []state
-		for _, n := range []int{0, 1, 2, 70} {
-			msg := loaded()
-			msg.cfg.Proxies = map[string]config.Proxy{}
-			for i := range n {
-				msg.cfg.Proxies[fmt.Sprintf("p%02d", i)] = config.Proxy{URL: "http://x"}
-			}
-			m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: sz[0], Height: sz[1]}, msg)
-			states = append(states, state{fmt.Sprintf("%d proxies", n), m})
+func TestGroupsAreSpacedAndAddEndsTheProxies(t *testing.T) {
+	msg := loaded()
+	msg.cfg.Proxies["zeta"] = config.Proxy{URL: "http://x"}
+	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 60}, msg)
+	ids := m.homeIDs()
+	if i := slices.Index(ids, "add"); i < 1 || ids[i-1] != "proxy:zeta" || ids[i+1] != "behavior" {
+		t.Fatalf("Add a proxy should follow the last proxy and come before Settings: %v", ids)
+	}
+	if ids[len(ids)-1] != "self" {
+		t.Fatalf("agentctl's updates close Settings: %v", ids)
+	}
+	var sections []string
+	for i, l := range navLines(m.navEntries(m.pal)) {
+		if l.header == "" {
+			continue
 		}
-		sameRects(t, states, "nav:add", "nav:p00")
+		sections = append(sections, l.header)
+		if i > 0 && navLines(m.navEntries(m.pal))[i-1].entry != -1 {
+			t.Errorf("%s should have a blank row above it", l.header)
+		}
+	}
+	if !slices.Equal(sections, []string{"Agents", "Servers", "Proxies", "Settings"}) {
+		t.Fatalf("sections = %v", sections)
+	}
+	r := rectsOf(m)
+	if r["nav:add"].Y != r["nav:proxy:zeta"].Y+2 {
+		t.Errorf("Add sits right under the last proxy: %+v vs %+v", r["nav:add"], r["nav:proxy:zeta"])
 	}
 }
 

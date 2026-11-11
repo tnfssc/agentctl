@@ -111,6 +111,7 @@ type Model struct {
 	frame   int
 
 	busy     string
+	pressed  string // the element that started the last action; it shows the spinner while busy
 	cfg      *config.Config
 	st       *config.State
 	statuses []agentStatus
@@ -202,7 +203,7 @@ func (m Model) Init() tea.Cmd {
 
 // needsFrames reports whether anything on screen is animating.
 func (m Model) needsFrames() bool {
-	if m.busy != "" || !m.loaded {
+	if m.busy != "" || !m.loaded || (m.release() && !m.selfChecked) {
 		return true
 	}
 	for _, n := range m.cfg.Names() {
@@ -365,15 +366,12 @@ func (m Model) homeIDs() []string {
 	if !m.loaded {
 		return []string{"add"}
 	}
-	var ids []string
-	for _, s := range m.statuses {
-		ids = append(ids, "agent:"+s.agent.Name)
+	entries := m.navEntries(m.pal)
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.id
 	}
-	ids = append(ids, "t3", "opencode", "behavior", "git", "memory", "self")
-	for _, n := range m.cfg.Names() {
-		ids = append(ids, "proxy:"+n)
-	}
-	return append(ids, "add")
+	return ids
 }
 
 func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
@@ -408,7 +406,7 @@ func (m Model) onPointer(p pointerMsg) (tea.Model, tea.Cmd) {
 
 // act performs what clicking element id (or pressing enter on it) means.
 func (m Model) act(id string) (tea.Model, tea.Cmd) {
-	m.toast = ""
+	m.toast, m.pressed = "", id
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
 	case "back":
@@ -500,6 +498,7 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
+	m.pressed = "m:" + id
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
 	case "close-btn":
@@ -643,6 +642,7 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			m.movePick(1)
 		case "enter", "space":
+			m.pressed = "m:opt:" + strconv.Itoa(m.pick)
 			return m.choose()
 		case "esc":
 			if m.dialog == modelDialog {
@@ -947,6 +947,7 @@ func (m Model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // submit validates the form and checks the proxy before saving it.
 func (m Model) submit() (tea.Model, tea.Cmd) {
+	m.pressed = "m:submit"
 	name := strings.TrimSpace(m.inputs[0].Value())
 	key := strings.TrimSpace(m.inputs[2].Value())
 	url, urlErr := proxy.NormalizeURL(m.inputs[1].Value())

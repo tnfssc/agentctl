@@ -16,7 +16,7 @@ func (m Model) signingState() string {
 func (m Model) gitDetail(p skin.Palette) detailView {
 	path, _ := tune.GitConfigPath()
 	d := detailView{
-		label:   "Behavior · all agents",
+		label:   "Settings · all agents",
 		heading: "Git for agents",
 		body:    "Global git settings that keep agents' pulls, pushes and conflicts smooth. Signing keys stay yours.",
 		buttons: [3]button{{"Tune", "tune:" + tune.Git, true}, {"Signing", "guide:signing", false}},

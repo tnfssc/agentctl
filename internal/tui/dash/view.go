@@ -125,6 +125,42 @@ type button struct {
 	primary   bool
 }
 
+// button draws b exactly width cells wide in every state, so nothing moves
+// when it changes. While an action runs, the button that started it shows a
+// spinner and every other button is dimmed and ignores hover, since nothing
+// takes input until it's done. Background checks a button started (a proxy
+// test, an update check) spin it too, without blocking the rest.
+func (m Model) button(p skin.Palette, b button, width int) string {
+	label := b.label
+	switch {
+	case m.working(b.id):
+		return p.Button(skin.Spin(m.frame)+" "+label, width, b.primary, false)
+	case m.busy != "":
+		return p.Faded().Button(label, width, false, false)
+	}
+	return p.Button(label, width, b.primary, m.hover == b.id)
+}
+
+// working reports whether the element started something that hasn't
+// finished.
+func (m Model) working(id string) bool {
+	if m.busy != "" && id == m.pressed {
+		return true
+	}
+	verb, arg, _ := strings.Cut(id, ":")
+	switch {
+	case verb == "test":
+		_, done := m.probes[arg]
+		return !done
+	case id == "m:test" && m.dialog == proxyDialog:
+		_, done := m.probes[m.proxy]
+		return !done
+	case id == "self-check":
+		return m.release() && !m.selfChecked
+	}
+	return false
+}
+
 // Home ----------------------------------------------------------------------
 
 func (m Model) sidebarWidth() int {
@@ -227,6 +263,8 @@ var maxHintWidth = func() int {
 
 func (m Model) hints() string {
 	switch {
+	case m.busy != "":
+		return "working · ctrl+c quits"
 	case m.dialog == guideDialog && m.remote:
 		return "enter done" // no clipboard over SSH
 	case m.dialog == guideDialog && m.guideUndo() == "":
@@ -278,7 +316,7 @@ func (m Model) drawDetail(sc *scene, p skin.Palette) {
 	by := top + 3 + bodyLines + 1
 	for i, b := range d.buttons {
 		if b.label != "" {
-			sc.add(p.Button(b.label, homeSlotW, b.primary, m.hover == b.id), left+i*(homeSlotW+1), by, 2, b.id)
+			sc.add(m.button(p, b, homeSlotW), left+i*(homeSlotW+1), by, 2, b.id)
 		}
 	}
 	for i, f := range d.facts {
@@ -308,7 +346,7 @@ func (m Model) detail(p skin.Palette) detailView {
 	case "behavior":
 		path, _ := tune.InstructionsPath()
 		d := detailView{
-			label:   "Behavior · all agents",
+			label:   "Settings · all agents",
 			heading: "Shared agent instructions",
 			body:    "Curated sections of " + tildePath(path) + ", read by every agent. Your own text there stays untouched.",
 			buttons: [3]button{{"Tune", "tune:" + tune.Instructions, true}},
@@ -529,7 +567,7 @@ func (m Model) panel(sc *scene, label, heading string, extras []button, cancel, 
 		sw := (iw - 2) / 3
 		put := func(b *button, slot int) {
 			if b != nil {
-				sc.add(p.Button(fit(b.label, sw), sw, b.primary, m.hover == b.id), d.X+pad+slot*(sw+1), by, 52, b.id)
+				sc.add(m.button(p, button{fit(b.label, sw), b.id, b.primary}, sw), d.X+pad+slot*(sw+1), by, 52, b.id)
 			}
 		}
 		put(primary, 2)
@@ -543,7 +581,7 @@ func (m Model) panel(sc *scene, label, heading string, extras []button, cancel, 
 	}
 	put := func(b *button, x int) {
 		if b != nil {
-			sc.add(p.Button(b.label, dialogSlot, b.primary, m.hover == b.id), x, by, 52, b.id)
+			sc.add(m.button(p, *b, dialogSlot), x, by, 52, b.id)
 		}
 	}
 	right := d.X + d.W - 3
@@ -704,7 +742,11 @@ func (m Model) drawOptions(sc *scene, x, y, rows int) {
 		}
 		o := m.options[i]
 		id := "m:opt:" + strconv.Itoa(i)
-		sc.add(p.Tall("›", o.label, o.detail, "", w, i == m.pick, m.hover == id), x, y+2*r, 53, id)
+		mark := " " // reserved, so the spinner never shortens the label
+		if m.busy != "" && m.pressed == id {
+			mark = skin.Spin(m.frame)
+		}
+		sc.add(p.Tall("›", o.label, o.detail, mark, w, i == m.pick, m.hover == id && m.busy == ""), x, y+2*r, 53, id)
 	}
 	m.drawMore(sc, x, y+2*rows, rows)
 }

@@ -15,5 +15,10 @@ classes, all from content-sized layout.
   to catch reintroduced shifts. Give new elements layer IDs so the tests cover them.
 - A second Codex audit found 5 more: report scroll reset on probe refresh, "Add a proxy" following the list length,
   multi-line text (errors, model ids) growing one-row cells, and text moving inside the pill. Now: refreshes keep the
-  scroll offset, Add sits on a fixed row below a fixed-height window, `skin.Cell` flattens line breaks, pill fields
-  have fixed widths. Model maps (probes, tune selection) are copied on write so value copies never share state.
+  scroll offset, Add sat on a fixed row below a fixed-height window (now an item ending Proxies, which moves only
+  when proxies are added or removed), `skin.Cell` flattens line breaks, pill fields have fixed widths. Model maps (probes, tune selection) are copied on write so value copies never share state.
+- Async feedback (user, 2026-11-11: "the button needs to change when it's loading", without moving or resizing): the
+  element that started an action (`m.pressed`, set in `act`/`actDialog`/form submits/list picks) shows a spinner in
+  its fixed slot while `busy`; every other button dims and drops hover; hints say only ctrl+c works. Background checks
+  a button started (proxy Test, update Check again) spin that button without blocking (`working`). List options
+  always reserve the mark column so a spinner never shortens their label. `busy_test.go` checks size and place.
