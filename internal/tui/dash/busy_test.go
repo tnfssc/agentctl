@@ -13,9 +13,8 @@ import (
 // spinner, the others dim, and none of them changes size or moves.
 func TestPressedButtonSpinsInPlace(t *testing.T) {
 	for _, sz := range sizes {
-		m := base(t, sz[0], sz[1])
-		m.version = "v1.4.0"
-		ask := send(t, m, selfCheckedMsg{latest: "v1.5.0"}, click("self-update"))
+		m := withUpdates(t, base(t, sz[0], sz[1]))
+		ask := send(t, m, click("upd:claude"))
 		busy := send(t, ask, keyPress("y"))
 		if busy.busy == "" || busy.pressed != "m:yes" {
 			t.Fatalf("%s: yes should start the update: busy %q pressed %q", sizeName(m), busy.busy, busy.pressed)

@@ -39,3 +39,12 @@ guides like `signing` ("one-time setup"), each with an uninstall guide.
   have bypassed the wrappers and were retired with the user's OK. OpenCode's server now runs in T3's agents' slice.
 - Dashboard entry points: Behavior › Memory (a machine-wide item, state from the record), T3 Code's Service menu and
   OpenCode's Server menu (Internet access), Git › Signing.
+- `tools` (2026-11-11): web search CLI + `mcpc`, one skill each. User: no vendor `init`/install scripts ("they install
+  a bunch of slop and plugins"); the CLI from its official package or release (Tavily: PyPI `tavily-cli`; Firecrawl:
+  GitHub release tarball + `checksums.txt`; mcpc: npm `@apify/mcpc`), the skill folder from the repo skills.sh lists
+  (`tavily-ai/skills` `skills/core/tavily-search`, `firecrawl/cli` `skills/firecrawl`, `apify/mcpc` `skills/mcpc` or
+  `mcpc help --skill`), not `npx skills add`. Keys are entered by the user in their own terminal.
+- `setup` (2026-11-11): the wizard, an agent walking through proxies/routing, the recommended settings (risky items
+  asked on their own), `tools`, then servers and the machine. No undo of its own; each step has one. Dashboard:
+  Settings › Recommended has Apply (in-dashboard, with confetti) and Wizard (this guide).
+

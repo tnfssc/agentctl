@@ -38,7 +38,7 @@ func recommended(t *testing.T, agentName string) map[string]bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Recommended(st)
+	return Recommended(st, false)
 }
 
 func TestClaudeRecommendedThenReset(t *testing.T) {
@@ -86,7 +86,7 @@ func TestClaudeRecommendedThenReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, st := range statuses {
-		if st.Applied != st.Recommended {
+		if st.Applied != (st.Recommended && !st.Risky) {
 			t.Errorf("%s applied = %v", st.ID, st.Applied)
 		}
 	}
@@ -169,7 +169,7 @@ hooks = true
 	if statuses[3].Applied {
 		t.Fatal("never + default sandbox is not the full no-approvals item")
 	}
-	run(t, "codex", Recommended(statuses))
+	run(t, "codex", Recommended(statuses, false))
 	got, _ := os.ReadFile(path)
 	want := `# mine
 model = "gpt-6.1-sol"
@@ -202,7 +202,7 @@ func TestInstructionsSectionsAndLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run(t, Instructions, Recommended(statuses))
+	run(t, Instructions, Recommended(statuses, false))
 
 	got, _ := os.ReadFile(path)
 	if !strings.HasPrefix(string(got), mine) || !strings.Contains(string(got), "<!-- agentctl:judgment -->") ||
@@ -230,12 +230,12 @@ func TestInstructionsImportIntoSeparateClaudeFile(t *testing.T) {
 	claudeMD := filepath.Join(home, ".claude", "CLAUDE.md")
 	mine := "# my own\n"
 	write(t, claudeMD, mine)
-	run(t, Instructions, Recommended(must(Inspect(Instructions))))
+	run(t, Instructions, Recommended(must(Inspect(Instructions)), false))
 	b, _ := os.ReadFile(claudeMD)
 	if !strings.HasPrefix(string(b), mine) || !strings.Contains(string(b), "\n@~/.agents/AGENTS.md\n") {
 		t.Fatalf("CLAUDE.md should keep its text and import the shared file:\n%s", b)
 	}
-	if plan, err := Plan(Instructions, Recommended(must(Inspect(Instructions)))); err != nil || !plan.Empty() {
+	if plan, err := Plan(Instructions, Recommended(must(Inspect(Instructions)), false)); err != nil || !plan.Empty() {
 		t.Fatalf("applying again should change nothing: %v\n%s", err, plan.Diff())
 	}
 	run(t, Instructions, nil)
@@ -264,7 +264,7 @@ func TestGitRecommendedThenReset(t *testing.T) {
 	if statuses[0].Applied {
 		t.Fatal("pull.rebase alone is not the whole merge-on-pull item")
 	}
-	run(t, Git, Recommended(statuses))
+	run(t, Git, Recommended(statuses, false))
 	got, _ := os.ReadFile(path)
 	for _, want := range []string{"name = Someone", "ff = true", "autoSetupRemote = true", "conflictStyle = zdiff3", "enabled = true", "algorithm = histogram", "prune = true"} {
 		if !strings.Contains(string(got), want) {
@@ -274,7 +274,7 @@ func TestGitRecommendedThenReset(t *testing.T) {
 	if st, _ := Inspect(Git); !st[0].Applied || !st[len(st)-1].Applied {
 		t.Fatal("applied items should read as applied")
 	}
-	if plan, err := Plan(Git, Recommended(must(Inspect(Git)))); err != nil || !plan.Empty() {
+	if plan, err := Plan(Git, Recommended(must(Inspect(Git)), false)); err != nil || !plan.Empty() {
 		t.Fatalf("applying again should change nothing: %v\n%s", err, plan.Diff())
 	}
 
@@ -290,5 +290,34 @@ func TestGitWithoutConfigCreatesNothingOnReset(t *testing.T) {
 	run(t, Git, map[string]bool{})
 	if _, err := os.Stat(filepath.Join(home, ".gitconfig")); !os.IsNotExist(err) {
 		t.Fatalf("a config agentctl created and emptied should be gone: %v", err)
+	}
+}
+
+func TestRecommendedIsEverythingButRiskyNeedsItsOwnYes(t *testing.T) {
+	testutil.Home(t)
+	for _, target := range Targets {
+		statuses := must(Inspect(target))
+		safe, all := Recommended(statuses, false), Recommended(statuses, true)
+		for _, st := range statuses {
+			if !all[st.ID] {
+				t.Errorf("%s: %s should be recommended", target, st.ID)
+			}
+			if safe[st.ID] == st.Risky {
+				t.Errorf("%s: %s risky=%v but in the safe set=%v", target, st.ID, st.Risky, safe[st.ID])
+			}
+		}
+	}
+	risky, err := RiskyAll()
+	if err != nil || len(risky) != 2 {
+		t.Fatalf("Claude Code's and Codex's no-approvals are the risky ones: %v %v", risky, err)
+	}
+	plan, err := PlanAll(false)
+	if err != nil || plan.Agent != All || plan.Empty() {
+		t.Fatalf("plan %+v %v", plan, err)
+	}
+	for _, c := range plan.Changes {
+		if strings.Contains(string(c.After), "bypassPermissions") || strings.Contains(string(c.After), "danger-full-access") {
+			t.Fatalf("risky settings slipped into the safe plan: %s", c.Path)
+		}
 	}
 }

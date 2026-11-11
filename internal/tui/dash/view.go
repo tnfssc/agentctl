@@ -72,6 +72,7 @@ func (m Model) scene() *scene {
 	if m.dialog != noDialog {
 		m.drawDialog(sc)
 	}
+	m.drawConfetti(sc)
 	return sc
 }
 
@@ -155,8 +156,8 @@ func (m Model) working(id string) bool {
 	case id == "m:test" && m.dialog == proxyDialog:
 		_, done := m.probes[m.proxy]
 		return !done
-	case id == "self-check":
-		return m.release() && !m.selfChecked
+	case id == "upd-check":
+		return m.checkingAgain
 	}
 	return false
 }
@@ -339,8 +340,14 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.ocDetail(p)
 	case "git":
 		return m.gitDetail(p)
-	case "self":
-		return m.selfDetail(p)
+	case "updates":
+		return m.updatesDetail(p)
+	case "recommended":
+		return m.recommendedDetail(p)
+	case "tools":
+		return m.toolsDetail(p)
+	case "settings":
+		return m.tuneDetail(p, name)
 	case "memory":
 		return m.memoryDetail(p)
 	case "behavior":
@@ -370,10 +377,8 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	title := as.agent.Title
 	d := detailView{label: "Agent · " + title}
 	path := configPath(as.agent.Name)
-	tuneBtn := button{"Tune", "tune:" + as.agent.Name, false}
-	if len(tune.Items(as.agent.Name)) == 0 {
-		tuneBtn = button{}
-	}
+	// Its curated settings are under Settings; this slot updates the CLI.
+	update := m.updateButton(as.agent.Name)
 	switch {
 	case as.err != nil:
 		d.heading = "Can't read its config"
@@ -381,14 +386,14 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	case as.status.Route == agent.Local:
 		d.heading = "Uses its own login"
 		d.body = "Requests use the account " + title + " is logged in with."
-		d.buttons = [3]button{{"Switch route", "switch:" + as.agent.Name, true}, {}, tuneBtn}
+		d.buttons = [3]button{{"Switch route", "switch:" + as.agent.Name, true}, {}, update}
 	default:
 		d.heading = "Routed through " + as.status.Route
 		d.body = "Requests use the accounts logged in on " + as.status.Route + "."
 		d.buttons = [3]button{
 			{"Switch route", "switch:" + as.agent.Name, true},
 			{"Own login", "local:" + as.agent.Name, false},
-			tuneBtn,
+			update,
 		}
 	}
 	if as.status.Model != "" {
@@ -398,6 +403,23 @@ func (m Model) agentDetail(p skin.Palette, as agentStatus) detailView {
 	if len(as.status.Notes) > 0 {
 		d.facts[2] = skin.Fg(p.Amber).Render("! " + as.status.Notes[0])
 	}
+	if u, ok := m.updateFor(as.agent.Name); ok {
+		d.facts[3] = fact(p, "version", versionLine(u))
+	}
+	return d
+}
+
+// tuneDetail is an agent's curated settings under Settings.
+func (m Model) tuneDetail(p skin.Palette, agentName string) detailView {
+	t := title(agentName)
+	d := detailView{
+		label:   "Settings · " + t,
+		heading: "Curated " + t + " settings",
+		body: "Opinionated settings for " + t + ": what it may do without asking, telemetry, and the like. You " +
+			"pick the items and review a diff before anything is written.",
+		buttons: [3]button{{"Tune", "tune:" + agentName, true}},
+	}
+	d.facts[0] = fact(p, "config", tildePath(configPath(agentName)))
 	return d
 }
 
@@ -657,7 +679,11 @@ func (m Model) drawDialog(sc *scene) {
 	case addDialog:
 		m.drawAddForm(sc)
 	case askDialog:
-		m.panel(sc, m.ask.title, m.ask.heading, nil, cancel, &button{m.ask.button, "m:yes", true})
+		var extras []button
+		if m.ask.no != "" {
+			extras = []button{{m.ask.no, "m:no", false}}
+		}
+		m.panel(sc, m.ask.title, m.ask.heading, extras, cancel, &button{m.ask.button, "m:yes", true})
 		text(skin.Clip(m.ask.body, b.W, b.H))
 	case devicesDialog:
 		m.drawDevices(sc)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -213,7 +214,65 @@ func TestUpdateRefusesSourceBuilds(t *testing.T) {
 	prev := version
 	version = ""
 	t.Cleanup(func() { version = prev })
-	if _, err := execute(t, "update", "--check"); err == nil || !strings.Contains(err.Error(), "built from source") {
+	if _, err := execute(t, "update", "--yes"); err == nil || !strings.Contains(err.Error(), "built from source") {
 		t.Fatalf("a dev build must not update itself: %v", err)
+	}
+}
+
+func TestUpdateAllRunsEachToolsUpdater(t *testing.T) {
+	home := testutil.Home(t)
+	tf := testutil.T3(t, home)
+	testutil.OpenCode(t, home)
+	clis := testutil.AgentCLIs(t)
+	prev := version
+	version = "" // a source build: agentctl leaves itself alone
+	t.Cleanup(func() { version = prev })
+
+	out := must(t, "update", "--check", "all")
+	for _, want := range []string{"Claude Code", "2.1.310 → 2.1.320", "Pi and its extensions", "extras may have updates", "agentctl", "built from source"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("check lacks %q:\n%s", want, out)
+		}
+	}
+	if len(clis.Calls(t)) != 0 {
+		t.Fatal("--check must not update anything")
+	}
+	if _, err := execute(t, "update", "all"); err == nil {
+		t.Fatal("without a terminal, updating needs --yes")
+	}
+	out, _ = execute(t, "update", "all", "--yes")
+	calls := clis.Calls(t)
+	if !slices.Contains(calls, "claude update") || !slices.Contains(calls, "pi update --all --no-approve") || slices.Contains(calls, "codex update") {
+		t.Fatalf("only tools with news update: %v\n%s", calls, out)
+	}
+	if !slices.Contains(tf.Calls(t), "update --channel nightly --yes") || !strings.Contains(out, "updated OpenCode") {
+		t.Fatalf("the servers update too:\n%s", out)
+	}
+	if _, err := execute(t, "update", "emacs"); err == nil {
+		t.Fatal("unknown tools are refused")
+	}
+}
+
+func TestTuneOnlyTurnsOnJustThoseItems(t *testing.T) {
+	home := testutil.Home(t)
+	must(t, "tune", "instructions", "--only", "web,mcp", "--yes")
+	b, err := os.ReadFile(filepath.Join(home, ".agents", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	if !strings.Contains(got, "## Web") || !strings.Contains(got, "## MCP") || strings.Contains(got, "## Judgment") {
+		t.Fatalf("only Web and MCP should be on:\n%s", got)
+	}
+	// What's on stays on.
+	must(t, "tune", "instructions", "--only", "links", "--yes")
+	if b, _ = os.ReadFile(filepath.Join(home, ".agents", "AGENTS.md")); !strings.Contains(string(b), "## Web") || !strings.Contains(string(b), "## Links") {
+		t.Fatalf("earlier items must stay:\n%s", b)
+	}
+	if _, err := execute(t, "tune", "instructions", "--only", "nope", "--yes"); err == nil || !strings.Contains(err.Error(), "web") {
+		t.Fatalf("unknown ids are refused with the list: %v", err)
+	}
+	if _, err := execute(t, "tune", "all", "--only", "web"); err == nil {
+		t.Fatal("--only needs one target")
 	}
 }

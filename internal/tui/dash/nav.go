@@ -41,10 +41,14 @@ func (m Model) navEntries(p skin.Palette) []navEntry {
 		out = append(out, navEntry{id: "proxy:" + n, section: "Proxies", icon: "●", label: n, detail: m.proxyState(n), dot: m.proxyDot(p, n)})
 	}
 	return append(out, addEntry,
+		m.recommendedEntry(),
+		navEntry{id: "settings:claude", section: "Settings", icon: "◇", label: "Claude Code", detail: "curated settings"},
+		navEntry{id: "settings:codex", section: "Settings", icon: "◇", label: "Codex", detail: "curated settings"},
 		navEntry{id: "behavior", section: "Settings", icon: "◇", label: "Instructions", detail: "all agents"},
 		navEntry{id: "git", section: "Settings", icon: "◇", label: "Git", detail: m.signingState()},
 		navEntry{id: "memory", section: "Settings", icon: "◇", label: "Memory", detail: m.memoryState()},
-		m.selfEntry(p),
+		navEntry{id: "tools", section: "Settings", icon: "◇", label: "Web & MCP", detail: m.toolsState()},
+		m.updatesEntry(p),
 	)
 }
 

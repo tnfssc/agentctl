@@ -25,9 +25,13 @@ type Item struct {
 	Title string
 	Why   string // what it buys you
 	Cost  string // what you give up
-	// Recommended items start ticked; the rest are opt-in.
+	// Recommended items start ticked; the rest are opt-in. Everything
+	// agentctl ships is recommended: the set is how its author runs agents.
 	Recommended bool
-	Ops         []Op
+	// Risky items take away a safety net; even recommended, they need their
+	// own yes before they're turned on.
+	Risky bool
+	Ops   []Op
 }
 
 func set(path string, v any) Op { return Op{Path: path, Value: v} }
@@ -87,7 +91,7 @@ var claudeItems = []Item{
 		},
 	},
 	{
-		ID: "no-approvals", Title: "Never ask for approval (risky)",
+		ID: "no-approvals", Title: "Never ask for approval (risky)", Recommended: true, Risky: true,
 		Why: "Claude runs every tool, including deletes of important paths, without asking. " +
 			"Only for machines and sandboxes you are happy to lose.",
 		Cost: "no safety net against mistakes or prompt injection",
@@ -119,7 +123,7 @@ var codexItems = []Item{
 		Ops:  []Op{set("analytics.enabled", false)},
 	},
 	{
-		ID: "no-approvals", Title: "Never ask, full disk access (risky)",
+		ID: "no-approvals", Title: "Never ask, full disk access (risky)", Recommended: true, Risky: true,
 		Why: "Codex runs commands without a sandbox or approvals, and web search goes live. " +
 			"Only for machines and sandboxes you are happy to lose.",
 		Cost: "no safety net against mistakes or prompt injection",

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
 	"github.com/tnfssc/agentctl/internal/tune"
+	"github.com/tnfssc/agentctl/internal/upgrade"
 )
 
 // dialog is the modal on top of the home screen, if any.
@@ -142,13 +144,23 @@ type Model struct {
 
 	guide   string   // guideDialog's topic
 	applied []string // guides whose setup is on record
+	recLeft int      // recommended items not applied yet
+	// confetti counts down the frames of the celebration after the
+	// recommended setup is applied; nothing else animates but spinners.
+	confetti int
 
-	version     string
-	exe         string // the running binary, which an update replaces
-	selfLatest  string
-	selfErr     error
-	selfChecked bool
-	selfUpdated string // the release installed this session
+	version       string
+	exe           string // the running binary, which an update replaces
+	selfLatest    string
+	selfErr       error
+	selfChecked   bool
+	selfUpdated   string // the release installed this session
+	clis          []upgrade.Status
+	clisLoaded    bool
+	checkingAgain bool     // Check again was pressed and answers are still coming
+	updQueue      []string // tools still to update, the running one first
+	updDone       []string // titles updated in this run
+	updFailed     []string // "title: why" for failures in this run
 
 	t3         t3.Status
 	t3Err      error
@@ -194,7 +206,7 @@ func (m *Model) setPalette(isDark bool) {
 
 // Init loads config, asks for the background color and looks for updates.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx)}
+	cmds := []tea.Cmd{tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx), inspectCLIs(m.ctx)}
 	if m.release() {
 		cmds = append(cmds, checkSelf(m.ctx))
 	}
@@ -203,7 +215,7 @@ func (m Model) Init() tea.Cmd {
 
 // needsFrames reports whether anything on screen is animating.
 func (m Model) needsFrames() bool {
-	if m.busy != "" || !m.loaded || (m.release() && !m.selfChecked) {
+	if m.busy != "" || !m.loaded || m.checkingAgain || m.confetti > 0 {
 		return true
 	}
 	for _, n := range m.cfg.Names() {
@@ -253,6 +265,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case frameMsg:
 		m.frame++
+		m.confetti = max(0, m.confetti-1)
 		return m, nil
 	case tea.MouseMsg:
 		return m, nil // resolved into pointerMsg by the view's OnMouse
@@ -278,6 +291,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.plan.Agent == app.ModelLists {
 			return m.close("Model lists updated. Restart running sessions to pick them up.", false), load
 		}
+		if msg.plan.Agent == tune.All {
+			if !m.remote {
+				m.confetti = confettiFrames
+			}
+			return m.close("The recommended setup is on. Restart running sessions to pick it up.", false), load
+		}
 		if msg.plan.Route == "" {
 			return m.close(title(msg.plan.Agent)+" settings updated. Restart running sessions to pick them up.", false), load
 		}
@@ -293,7 +312,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m.close(msg.err.Error(), true), nil
 		}
-		m.tuneAgent, m.tuneItems, m.tuneWant = msg.agent, msg.items, tune.Recommended(msg.items)
+		m.tuneAgent, m.tuneItems, m.tuneWant = msg.agent, msg.items, tune.Recommended(msg.items, true)
 		m.options = make([]option, len(msg.items))
 		for i, it := range msg.items {
 			m.options[i] = option{label: it.Title, detail: it.Cost, value: it.ID}
@@ -320,8 +339,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onT3(msg)
 	case ocLoadedMsg, ocDoneMsg:
 		return m.onOC(msg)
-	case selfCheckedMsg, selfUpdatedMsg:
-		return m.onSelf(msg)
+	case selfCheckedMsg, clisMsg, updStepMsg:
+		return m.onUpdates(msg)
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -344,7 +363,7 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	}
 	first := !m.loaded
 	m.cfg, m.st, m.statuses, m.loaded = msg.cfg, msg.st, msg.statuses, true
-	m.signed, m.signingKey, m.applied = msg.signed, msg.signingKey, msg.applied
+	m.signed, m.signingKey, m.applied, m.recLeft = msg.signed, msg.signingKey, msg.applied, msg.recLeft
 	m.focus = min(m.focus, len(m.homeIDs())-1)
 	if !first {
 		return m, nil
@@ -444,6 +463,8 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m.act("tune:" + tune.Git)
 	case "memory":
 		return m.act("guide:memory")
+	case "tools":
+		return m.act("guide:tools")
 	case "guide":
 		return m.openGuide(arg), nil
 	case "t3":
@@ -461,15 +482,21 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "self":
-		for _, b := range m.selfDetail(m.pal).buttons {
+	case "recommended":
+		return m.act("rec-apply")
+	case "rec-apply":
+		return m.applyRecommended()
+	case "updates":
+		for _, b := range m.updatesDetail(m.pal).buttons {
 			if b.primary {
 				return m.act(b.id)
 			}
 		}
 		return m, nil
-	case "self-check", "self-update":
-		return m.actSelf(verb)
+	case "upd", "upd-all", "upd-check":
+		return m.actUpdates(verb, arg)
+	case "settings":
+		return m.act("tune:" + arg)
 	case "t3-install", "t3-repair", "t3-setup", "t3-update", "t3-restart", "t3-devices", "t3-service", "t3-uninstall":
 		return m.actT3(verb)
 	case "oc-start", "oc-restart", "oc-update", "oc-remote", "oc-signout", "oc-stop", "oc-server", "oc-pair":
@@ -512,10 +539,20 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 			m.dialog = devicesDialog
 			return m, nil
 		}
+		if m.dialog == askDialog && m.ask.back != noDialog {
+			m.dialog = m.ask.back
+			return m, nil
+		}
 		return m.close("", false), nil
 	case "yes":
 		m.busy = m.ask.busy
 		return m, m.ask.run
+	case "no":
+		if m.ask.noRun == nil {
+			return m, nil
+		}
+		m.busy = m.ask.busy
+		return m, m.ask.noRun
 	case "revoke", "revoke-idle", "pair":
 		return m.actDevices(verb)
 	case "submit-pair":
@@ -549,6 +586,13 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		}
 		return m.choose()
 	case "tune-review":
+		if risky := tune.RiskyNew(m.tuneItems, m.tuneWant); len(risky) > 0 {
+			without := maps.Clone(m.tuneWant)
+			for _, st := range risky {
+				without[st.ID] = false
+			}
+			return m.askRisky(risky, planTune(m.tuneAgent, m.tuneWant), planTune(m.tuneAgent, without), tuneDialog), nil
+		}
 		m.busy = "Planning"
 		return m, planTune(m.tuneAgent, m.tuneWant)
 	case "tune-reset":
@@ -712,6 +756,8 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch k {
 		case "y", "enter":
 			return m.actDialog("yes")
+		case "l":
+			return m.actDialog("no")
 		case "n", "esc":
 			return m.actDialog("cancel")
 		}
@@ -1029,6 +1075,8 @@ func title(agentName string) string {
 		return tune.InstructionsTitle
 	case tune.Git:
 		return tune.GitTitle
+	case tune.All:
+		return tune.AllTitle
 	}
 	if a, err := app.FindAgent(agentName); err == nil {
 		return a.Title

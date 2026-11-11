@@ -32,7 +32,10 @@ curl -fsSL https://github.com/tnfssc/agentctl/releases/latest/download/install.s
 
 Downloads the matching binary, verifies its SHA-256 checksum and installs to `~/.local/bin` without sudo.
 Add that directory to your PATH if needed, then run `agentctl`. Update with `agentctl update` (from v1.1.0; before
-that, run the install command again).
+that, run the install command again). `agentctl update all` also updates the agents' CLIs and the servers, each
+through its own updater (`claude update`, `codex update`, `opencode upgrade`, `pi update --all` with Pi's extensions,
+`t3 update`); `--check` only lists what's out of date. In the dashboard each agent's page has an Update button, and
+Settings › Updates has Update all.
 
 For a specific version or install directory:
 
@@ -75,13 +78,18 @@ agentctl status
 A proxy is just a URL and a client API key; reach it however you like (Tailscale serve, a LAN address). For a key
 that should stay on the proxy's machine, `--key-cmd` runs a command to print it instead of storing it.
 
-`agentctl tune claude` (or the Tune button) applies curated settings: fewer unused tools, no background spend,
-privacy without losing features, and an opt-in "never ask for approval". `agentctl tune instructions` (Behavior in
-the dashboard) adds curated sections to your shared `~/.agents/AGENTS.md`, which Claude Code reads too; your own text
-there is never touched. `agentctl tune git` (Git in the dashboard) sets git up for agents in your global git config:
+Not sure where to start? Paste `agentctl guide setup` into your coding agent: it walks you through proxies and
+routing, the recommended settings, web search and MCP, and the servers, asking before each step.
+
+`agentctl tune claude` (Settings › Claude Code in the dashboard) applies curated settings: fewer unused tools, no
+background spend, privacy without losing features, and "never ask for approval". `agentctl tune instructions`
+(Settings › Instructions) adds curated sections to your shared `~/.agents/AGENTS.md`, which Claude Code reads too, among
+them: link every PR and ticket, search the web with a CLI, reach MCP servers through `mcpc`; your own text there is
+never touched. `agentctl tune git` (Git in the dashboard) sets git up for agents in your global git config:
 merge on pull, upstream set on first push, conflicts with the common base, remembered resolutions, clearer diffs, pruned
 remote branches. Unticking an item, or "Reset to default", puts the defaults back. You review a diff before anything is
-written.
+written. Everything is recommended: `agentctl tune all` (Settings › Recommended) applies the whole set at once. The two
+risky items, no approval prompts for Claude Code and no sandbox for Codex, ask separately, or take `--risky`.
 
 agentctl doesn't touch signing keys. `agentctl guide signing` prints instructions for your coding agent instead: paste
 the command into it and it walks you through the key, git and GitHub. Other one-time setups work the same way, each
@@ -94,6 +102,9 @@ with an undo guide, and the dashboard shows the command to paste:
   `agentctl guide memory-undo`.
 - `agentctl guide tunnel`: reaches T3 Code and OpenCode from anywhere through a Cloudflare Tunnel on your own domain,
   with `cloudflared`, optionally behind Cloudflare Access. Undo: `agentctl guide tunnel-undo`.
+- `agentctl guide tools`: a web search CLI (Tavily or Firecrawl) and `mcpc` for MCP servers, each from its official
+  package or release with one skill, and your API key; built-in web search doesn't work through a proxy. Undo:
+  `agentctl guide tools-undo`.
 
 Models agentctl cannot prove are non-Anthropic, and image or audio models, are hidden from Codex, OpenCode and Pi.
 Clear one you trust with `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude

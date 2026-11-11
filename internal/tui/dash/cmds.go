@@ -23,6 +23,7 @@ type (
 		signed     bool
 		signingKey string
 		applied    []string // guides whose setup is on record
+		recLeft    int      // recommended items not applied yet
 		err        error
 	}
 	probedMsg struct {
@@ -86,6 +87,15 @@ func load() tea.Msg {
 	msg := loadedMsg{cfg: cfg, st: st}
 	msg.signed, msg.signingKey = tune.SigningStatus()
 	msg.applied = guide.Applied()
+	for _, target := range tune.Targets {
+		if items, err := tune.Inspect(target); err == nil {
+			for _, it := range items {
+				if it.Recommended && !it.Applied {
+					msg.recLeft++
+				}
+			}
+		}
+	}
 	for _, a := range app.Agents {
 		s, err := a.Status(cfg)
 		msg.statuses = append(msg.statuses, agentStatus{agent: a, status: s, err: err})
@@ -115,6 +125,13 @@ func refresh(ctx context.Context, cfg *config.Config, st *config.State) tea.Cmd 
 	return func() tea.Msg {
 		p, err := app.Refresh(ctx, cfg, st)
 		return plannedMsg{plan: p, err: err, refresh: true}
+	}
+}
+
+func planAll(risky bool) tea.Cmd {
+	return func() tea.Msg {
+		p, err := tune.PlanAll(risky)
+		return plannedMsg{plan: p, err: err}
 	}
 }
 

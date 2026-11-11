@@ -56,6 +56,11 @@ type askSpec struct {
 	run                          tea.Cmd
 	busy                         string
 	reopen                       bool // return to the devices dialog afterwards
+	// no, when set, labels a second answer that runs noRun, e.g. going on
+	// without the risky items; cancelling stops altogether.
+	no    string
+	noRun tea.Cmd
+	back  dialog // where Cancel returns to; noDialog closes
 }
 
 func inspectT3(ctx context.Context) tea.Cmd {

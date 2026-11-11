@@ -123,25 +123,20 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 			s.page = pageDetail
 			states = append(states, state{fmt.Sprintf("memory %v", applied), s})
 		}
-		for _, c := range []struct {
-			name    string
-			version string
-			msg     tea.Msg
-		}{
-			{"self checking", "v1.4.0", nil},
-			{"self update", "v1.4.0", selfCheckedMsg{latest: "v1.5.0"}},
-			{"self latest", "v1.5.0", selfCheckedMsg{latest: "v1.5.0"}},
-			{"self offline", "v1.5.0", selfCheckedMsg{err: errors.New(strings.Repeat("offline ", 20))}},
-			{"self source", "dev", nil},
+		current := withUpdates(t, m)
+		current.clis[0].Latest = current.clis[0].Version
+		offline := withUpdates(t, m)
+		offline.selfErr = errors.New(strings.Repeat("offline ", 20))
+		again, _ := withUpdates(t, m).act("upd-check")
+		for name, s := range map[string]Model{
+			"updates checking": m, "updates news": withUpdates(t, m), "updates current": current,
+			"updates offline": offline, "updates checking again": again.(Model),
 		} {
-			s := m
-			s.version = c.version
-			if c.msg != nil {
-				s = send(t, s, c.msg)
+			for _, focus := range []string{"updates", "agent:claude"} {
+				f := focusOn(s, focus)
+				f.page = pageDetail
+				states = append(states, state{name + " " + focus, f})
 			}
-			s = focusOn(s, "self")
-			s.page = pageDetail
-			states = append(states, state{c.name, s})
 		}
 
 		// The frame never moves, whatever is selected.
@@ -153,9 +148,9 @@ func TestHomeHasNoLayoutShift(t *testing.T) {
 		}
 		// Button slots: whatever button a slot holds, the slot never moves.
 		for _, slot := range [][]string{
-			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions", "self-update", "guide:memory"},
-			{"local:codex", "refresh", "self-check"},
-			{"tune:claude", "tune:codex", "rm:spark"},
+			{"switch:claude", "switch:codex", "test:spark", "add-btn", "tune:instructions", "upd-all", "guide:memory"},
+			{"local:codex", "refresh", "upd-check"},
+			{"upd:claude", "rm:spark"},
 		} {
 			var placed []state
 			for _, s := range states {
@@ -239,12 +234,12 @@ func dialogStates(t *testing.T, m Model) []state {
 		allowMany = send(t, allowMany, keyPress("down"))
 	}
 	add("allow many scrolled", allowMany)
-	self := m
-	self.version = "v1.4.0"
-	askSelf := send(t, self, selfCheckedMsg{latest: "v1.5.0"}, click("self-update"))
-	add("ask self", askSelf)
-	add("ask self busy", send(t, askSelf, keyPress("y")))
+	askAll := send(t, withUpdates(t, m), click("upd-all"))
+	add("ask update all", askAll)
+	add("ask update all busy", send(t, askAll, keyPress("y")))
 	add("allow busy", send(t, allow, keyPress("space"), keyPress("y")))
+	risky := []tune.Status{{Item: tune.Item{ID: "no-approvals", Title: "Never ask for approval (risky)", Why: strings.Repeat("why ", 30), Cost: "no safety net", Risky: true}}}
+	add("ask risky", m.askRisky(risky, nil, nil, noDialog))
 	add("remove", send(t, m, click("rm:spark")))
 	inUse := loaded()
 	inUse.statuses[1].status.Route = "spark"
@@ -400,11 +395,11 @@ func TestGroupsAreSpacedAndAddEndsTheProxies(t *testing.T) {
 	msg.cfg.Proxies["zeta"] = config.Proxy{URL: "http://x"}
 	m := send(t, New(context.Background(), Options{}), tea.WindowSizeMsg{Width: 120, Height: 60}, msg)
 	ids := m.homeIDs()
-	if i := slices.Index(ids, "add"); i < 1 || ids[i-1] != "proxy:zeta" || ids[i+1] != "behavior" {
+	if i := slices.Index(ids, "add"); i < 1 || ids[i-1] != "proxy:zeta" || ids[i+1] != "recommended" {
 		t.Fatalf("Add a proxy should follow the last proxy and come before Settings: %v", ids)
 	}
-	if ids[len(ids)-1] != "self" {
-		t.Fatalf("agentctl's updates close Settings: %v", ids)
+	if ids[len(ids)-1] != "updates" {
+		t.Fatalf("Updates closes Settings: %v", ids)
 	}
 	var sections []string
 	for i, l := range navLines(m.navEntries(m.pal)) {

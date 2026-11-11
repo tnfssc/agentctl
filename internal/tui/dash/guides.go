@@ -27,6 +27,16 @@ var guideTexts = map[string]guideText{
 		"On Linux, every agent shares one cap and Docker another, below the RAM, and T3 Code's server gets a " +
 			"guarantee; macOS can only cap Docker. Paste this into your coding agent; it asks before changing anything.",
 	},
+	"tools": {
+		"Web & MCP", "Web search and MCP from the shell",
+		"A web search CLI (Tavily or Firecrawl) with one skill and your key, and mcpc for MCP servers, instead of " +
+			"built-in web search, which fails through a proxy. Paste this into your coding agent; it asks first.",
+	},
+	"setup": {
+		"Setup wizard", "Let your agent set everything up",
+		"Your coding agent walks you through proxies and routing, the recommended settings, web search and MCP, " +
+			"then servers and memory limits, asking before each step. Paste this into it.",
+	},
 	"tunnel": {
 		"Internet access", "Reach T3 Code and OpenCode from anywhere",
 		"A Cloudflare Tunnel to hostnames on your own domain, with no ports opened. Paste this into your coding " +
@@ -46,6 +56,30 @@ func (m Model) memoryState() string {
 		return "limits set up"
 	}
 	return "no limits"
+}
+
+// toolsState is the sidebar's word for the web search and MCP guide.
+func (m Model) toolsState() string {
+	if m.setUp("tools") {
+		return "set up"
+	}
+	return "not set up"
+}
+
+// toolsDetail is the Settings item for the web search and MCP guide.
+func (m Model) toolsDetail(p skin.Palette) detailView {
+	d := detailView{
+		label:   "Settings · this machine",
+		heading: "Web search and MCP from the shell",
+		body: "Built-in web search fails through a proxy. Your coding agent installs a web search CLI (Tavily or " +
+			"Firecrawl) and mcpc, one skill each, without the vendors' extras.",
+		buttons: [3]button{{"Guide", "guide:tools", true}},
+	}
+	d.facts[0] = fact(p, "state", "not set up")
+	if m.setUp("tools") {
+		d.facts[0] = fact(p, "state", "set up · undo with "+guide.Command(guide.Undo("tools")))
+	}
+	return d
 }
 
 // setUp reports whether a guide's setup is on record.

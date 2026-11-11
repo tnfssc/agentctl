@@ -82,7 +82,35 @@ Media committed to a repo stays forever: attach screenshots/videos with ‵gh‵
 		Ops: []Op{section("links", `
 ## Links
 
-Every PR, ticket or thread mentioned gets a clickable link, not a bare number.
+Every PR, issue, ticket or thread mentioned gets a clickable link, e.g. ‵[#123](https://github.com/org/repo/pull/123)‵
+or ‵[ENG-42](https://linear.app/...)‵, never a bare number or key: a bare one sends the reader searching. Don't know
+the URL? Look it up (‵gh pr view <n> --json url‵, ‵gh issue view‵, the tracker's CLI) before writing it.
+`)},
+	},
+	{
+		ID: "web", Title: "Web search through a CLI", Recommended: true,
+		Why: "Built-in web search and fetch are unreliable, and through a proxy they don't work at all; the agent " +
+			"uses the Tavily or Firecrawl CLI instead (set up with `agentctl guide tools`).",
+		Cost: "needs one of those CLIs and its key",
+		Ops: []Op{section("web", `
+## Web
+
+Search and read the web with the ‵tvly‵ (Tavily) or ‵firecrawl‵ CLI, whichever is installed, and its skill, not the
+built-in web search or fetch tools: those are unreliable and fail outright behind a proxy. ‵--json‵ output pipes into
+‵jq‵. Neither installed: say so, and suggest ‵agentctl guide tools‵.
+`)},
+	},
+	{
+		ID: "mcp", Title: "MCP through mcpc", Recommended: true,
+		Why: "MCP servers are reached with the mcpc CLI from the shell instead of being added to each agent's " +
+			"config, so their tool definitions don't fill every request.",
+		Cost: "needs mcpc (set up with `agentctl guide tools`)",
+		Ops: []Op{section("mcp", `
+## MCP
+
+Reach MCP servers through the ‵mcpc‵ CLI and its skill rather than adding them to an agent's config: connect once to a
+named ‵@session‵, then list and call tools from the shell (‵--json‵ for scripting). Tool definitions stay out of
+context until needed, and the same sessions work from every agent.
 `)},
 	},
 	{

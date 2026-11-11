@@ -28,3 +28,17 @@ Agreed with the user 2026-11-09.
 - Items chosen with the user (generic, from their Mac and minipc files): judgment, shared tools, link every PR/ticket,
   working style, project notes, terse replies. Dropped: Git/PR habits beyond linking, Playwright UI checks, anything
   Writer-, gcloud-, kubectl- or machine-specific.
+
+## Recommended is everything (user, 2026-11-11)
+
+"The recommended way should be exactly how I use it: turn on everything." Every item is `Recommended`; the two
+no-approvals items are also `Risky` and need their own yes ("Everything, ask on risky"): the CLI asks per item after
+the picker (or `--risky`), `--yes` alone leaves them off, and the dashboard's Review and Settings › Recommended ask
+with Turn on / Leave off / Cancel. `agentctl tune all` (`tune.PlanAll`, one merged diff for claude, codex,
+instructions, git) is the recommended set at once; in the dashboard it ends with a 2 s confetti burst (user asked for
+delight; local sessions only, the only animation besides spinners). Instructions gained `web` (Tavily/Firecrawl CLI
+instead of built-in search, which fails behind a proxy) and `mcp` (`mcpc` instead of per-agent MCP config), and
+`links` now says how to find a URL instead of printing a bare number.
+`--only <ids>` (2026-11-11) turns on just those items and leaves the rest as they are, so a guide's agent can switch
+on e.g. the Web and MCP instructions without a person at the picker (`agentctl tune instructions --only web,mcp
+--yes`). It only turns things on; turning one off stays interactive (picker or dashboard).

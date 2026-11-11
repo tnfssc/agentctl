@@ -148,13 +148,69 @@ func Inspect(agentName string) ([]Status, error) {
 }
 
 // Recommended is the starting selection: what is already applied plus the
-// recommended items.
-func Recommended(statuses []Status) map[string]bool {
+// recommended items, the risky ones only when risky is set.
+func Recommended(statuses []Status, risky bool) map[string]bool {
 	want := map[string]bool{}
 	for _, st := range statuses {
-		want[st.ID] = st.Applied || st.Recommended
+		want[st.ID] = st.Applied || (st.Recommended && (risky || !st.Risky))
 	}
 	return want
+}
+
+// RiskyNew lists the risky items want turns on that aren't on yet: each
+// needs its own yes.
+func RiskyNew(statuses []Status, want map[string]bool) []Status {
+	var out []Status
+	for _, st := range statuses {
+		if st.Risky && want[st.ID] && !st.Applied {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+// All is the tune target for every target's recommended set at once.
+const All = "all"
+
+// AllTitle names it for people.
+const AllTitle = "Recommended setup"
+
+// Targets are the targets All covers, in order.
+var Targets = []string{claude.Name, codex.Name, Instructions, Git}
+
+// PlanAll merges every target's recommended selection into one plan, the
+// risky items only when risky is set.
+func PlanAll(risky bool) (agent.Plan, error) {
+	merged := agent.Plan{Agent: All}
+	for _, target := range Targets {
+		statuses, err := Inspect(target)
+		if err != nil {
+			return agent.Plan{}, fmt.Errorf("%s: %w", target, err)
+		}
+		p, err := Plan(target, Recommended(statuses, risky))
+		if err != nil {
+			return agent.Plan{}, fmt.Errorf("%s: %w", target, err)
+		}
+		for _, c := range p.Changes {
+			c.Agent = target
+			merged.Changes = append(merged.Changes, c)
+		}
+		merged.Warnings = append(merged.Warnings, p.Warnings...)
+	}
+	return merged, nil
+}
+
+// RiskyAll lists the risky items PlanAll(true) would turn on.
+func RiskyAll() ([]Status, error) {
+	var out []Status
+	for _, target := range Targets {
+		statuses, err := Inspect(target)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, RiskyNew(statuses, Recommended(statuses, true))...)
+	}
+	return out, nil
 }
 
 // Plan prepares the edits that make the agent match want: ticked items are
