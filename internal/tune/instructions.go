@@ -90,20 +90,20 @@ links don't render there.
 	{
 		ID: "web", Title: "Web search through a CLI", Recommended: true,
 		Why: "Built-in web search and fetch are unreliable, and through a proxy they don't work at all; the agent " +
-			"uses the Tavily or Firecrawl CLI instead (set up with `agentctl guide tools`).",
-		Cost: "needs one of those CLIs and its key",
+			"uses the Tavily or Firecrawl CLI instead (installed with `agentctl tools`).",
+		Cost: "needs one of those CLIs; a key lifts Tavily's rate cap",
 		Ops: []Op{section("web", `
 ## Web
 
 Web search and fetch: ‵tvly‵ (Tavily) or ‵firecrawl‵ CLI and its skill, not built-in web tools; those are unreliable
-and fail behind a proxy. ‵--json‵ pipes into ‵jq‵. Neither installed: say so, suggest ‵agentctl guide tools‵.
+and fail behind a proxy. ‵--json‵ pipes into ‵jq‵. Neither installed: say so, suggest ‵agentctl tools‵.
 `)},
 	},
 	{
 		ID: "mcp", Title: "MCP through mcpc", Recommended: true,
 		Why: "MCP servers are reached with the mcpc CLI from the shell instead of being added to each agent's " +
 			"config, so their tool definitions don't fill every request.",
-		Cost: "needs mcpc (set up with `agentctl guide tools`)",
+		Cost: "needs mcpc (installed with `agentctl tools`)",
 		Ops: []Op{section("mcp", `
 ## MCP
 

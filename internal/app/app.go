@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/tnfssc/agentctl/internal/agent"
@@ -174,16 +175,20 @@ func Plan(ctx context.Context, cfg *config.Config, st *config.State, r Request) 
 	}
 }
 
-// Apply writes a plan and saves the state that came with it. A Claude Code
-// proxy route counts as the user accepting the policy warning.
-func Apply(plan agent.Plan, st *config.State) error {
+// Apply writes a plan, saves the state that came with it, then takes the
+// plan's steps, their output going to out. A Claude Code proxy route counts
+// as the user accepting the policy warning.
+func Apply(ctx context.Context, out io.Writer, plan agent.Plan, st *config.State) error {
 	if err := plan.Apply(); err != nil {
 		return err
 	}
 	if sendsClaudeToProxy(plan.Agent, plan.Route) {
 		st.ClaudeProxyAcknowledged = true
 	}
-	return st.Save()
+	if err := st.Save(); err != nil {
+		return err
+	}
+	return plan.RunAll(ctx, out)
 }
 
 // ConnectOpenCodeClaude turns on OpenCode's claude-agent provider for an

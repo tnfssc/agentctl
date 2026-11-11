@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -274,5 +275,27 @@ func TestTuneOnlyTurnsOnJustThoseItems(t *testing.T) {
 	}
 	if _, err := execute(t, "tune", "all", "--only", "web"); err == nil {
 		t.Fatal("--only needs one target")
+	}
+}
+
+func TestToolsInstallsWhatTheInstructionsPointAt(t *testing.T) {
+	testutil.Home(t)
+	fake := testutil.Tools(t, "uv", "brew", "npm")
+	out := must(t, "tune", "all", "--dry-run")
+	if !strings.Contains(out, "run uv tool install tavily-cli") || !strings.Contains(out, "run skill mcpc") {
+		t.Fatalf("the recommended setup installs the tools too:\n%s", out)
+	}
+	if out = must(t, "tools", "--dry-run"); !strings.Contains(out, "run uv tool install tavily-cli") || len(fake.Calls()) > 0 {
+		t.Fatalf("dry run lists, installs nothing (%v):\n%s", fake.Calls(), out)
+	}
+	if _, err := execute(t, "tools"); !errors.Is(err, errNeedsYes) {
+		t.Fatalf("not a terminal needs --yes: %v", err)
+	}
+	must(t, "tools", "--yes")
+	if len(fake.Calls()) != 2 {
+		t.Fatalf("installed tvly and mcpc: %v", fake.Calls())
+	}
+	if out = must(t, "tools", "--yes"); !strings.Contains(out, "nothing to do") {
+		t.Fatalf("second run: %s", out)
 	}
 }

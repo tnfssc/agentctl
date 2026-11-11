@@ -2,6 +2,9 @@ package dash
 
 import (
 	"context"
+	"errors"
+	"io"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/proxy"
+	"github.com/tnfssc/agentctl/internal/tools"
 	"github.com/tnfssc/agentctl/internal/tune"
 )
 
@@ -23,7 +27,8 @@ type (
 		signed     bool
 		signingKey string
 		applied    []string // guides whose setup is on record
-		recLeft    int      // recommended items not applied yet
+		tools      tools.Status
+		recLeft    int // recommended items not applied yet
 		err        error
 	}
 	probedMsg struct {
@@ -87,6 +92,10 @@ func load() tea.Msg {
 	msg := loadedMsg{cfg: cfg, st: st}
 	msg.signed, msg.signingKey = tune.SigningStatus()
 	msg.applied = guide.Applied()
+	msg.tools = tools.Inspect()
+	if runs, _ := tools.Plan(); len(runs) > 0 {
+		msg.recLeft++
+	}
 	for _, target := range tune.Targets {
 		if items, err := tune.Inspect(target); err == nil {
 			for _, it := range items {
@@ -135,6 +144,14 @@ func planAll(risky bool) tea.Cmd {
 	}
 }
 
+func planTools() tea.Msg {
+	runs, warnings := tools.Plan()
+	if len(runs) == 0 && len(warnings) > 0 {
+		return plannedMsg{err: errors.New(strings.Join(warnings, "; "))}
+	}
+	return plannedMsg{plan: agent.Plan{Agent: tools.Name, Runs: runs, Warnings: warnings}}
+}
+
 func inspectTune(agentName string) tea.Cmd {
 	return func() tea.Msg {
 		items, err := tune.Inspect(agentName)
@@ -151,7 +168,7 @@ func planTune(agentName string, want map[string]bool) tea.Cmd {
 
 func apply(ctx context.Context, p agent.Plan, st *config.State) tea.Cmd {
 	return func() tea.Msg {
-		if err := app.Apply(p, st); err != nil {
+		if err := app.Apply(ctx, io.Discard, p, st); err != nil {
 			return appliedMsg{plan: p, err: err}
 		}
 		msg, failed := connectClaude(ctx, p)

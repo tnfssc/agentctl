@@ -102,9 +102,9 @@ with an undo guide, and the dashboard shows the command to paste:
   `agentctl guide memory-undo`.
 - `agentctl guide tunnel`: reaches T3 Code and OpenCode from anywhere through a Cloudflare Tunnel on your own domain,
   with `cloudflared`, optionally behind Cloudflare Access. Undo: `agentctl guide tunnel-undo`.
-- `agentctl guide tools`: a web search CLI (Tavily or Firecrawl) and `mcpc` for MCP servers, each from its official
-  package or release with one skill, and your API key; built-in web search doesn't work through a proxy. Undo:
-  `agentctl guide tools-undo`.
+- `agentctl guide tools`: Firecrawl instead of or next to Tavily, and API keys. `agentctl tools` (and the recommended
+  setup) already installs Tavily's CLI and `mcpc`, each from its official package with one skill; built-in web search
+  doesn't work through a proxy. Undo: `agentctl guide tools-undo`.
 
 Models agentctl cannot prove are non-Anthropic, and image or audio models, are hidden from Codex, OpenCode and Pi.
 Clear one you trust with `agentctl proxy allow spark <model>`; anything that looks like Claude stays blocked. Claude

@@ -3,8 +3,11 @@
 You're setting up the command line tools this machine's coding agents use instead of their built-in ones: a web
 search CLI (Tavily's `tvly` or Firecrawl's `firecrawl`) with its skill and an API key, and `mcpc` for MCP servers with
 its skill. Built-in web search and fetch are unreliable, and through a proxy they don't work at all; MCP servers
-added to each agent's config fill every request with tool definitions. agentctl doesn't install these itself; you do,
-with the user.
+added to each agent's config fill every request with tool definitions.
+
+`agentctl tools` installs Tavily's CLI, `mcpc` and their skills the lean way described below, and records it; the
+recommended setup runs it too. Use it for those (`--dry-run` first shows what's missing); this guide is for what it
+doesn't do: Firecrawl, API keys, and skill folders for agents that don't read `~/.agents/skills`.
 
 Keep it lean: don't run the vendors' `init` or `setup` commands or their install scripts. They add plugins, MCP
 servers, extra skills and editor configs the user doesn't want. Install each CLI from its official package or release
@@ -80,6 +83,7 @@ those two, leaving the user's other instructions as they are: `agentctl tune ins
 
 ## Record what you did
 
-Write `<records>/tools.md` (create the directory) so it can be undone, also by `agentctl guide tools-undo`: the date,
-each CLI and how it was installed (package manager or path), each skill folder and link you created and where it came
-from, and which sign-ins you set up (never the keys). Then tell the user what's ready and how to undo it.
+Write `<records>/tools.md` so it can be undone, also by `agentctl guide tools-undo`; add to it when `agentctl tools`
+already started it, else create it (and the directory): the date, each CLI and how it was installed (package manager
+or path), each skill folder and link you created and where it came from, and which sign-ins you set up (never the
+keys). Then tell the user what's ready and how to undo it.

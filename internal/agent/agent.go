@@ -4,8 +4,10 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -41,16 +43,27 @@ func (c Change) noop() bool {
 	return c.Link == "" && bytes.Equal(c.Before, c.After) && (c.Before == nil) == (c.After == nil)
 }
 
+// Run is a step applying a plan takes after writing its files, such as
+// installing a tool. Title is what the review shows.
+type Run struct {
+	Title string
+	Do    func(ctx context.Context, out io.Writer) error
+}
+
 // Plan is everything one `use` would do to an agent, shown before applying.
 type Plan struct {
 	Agent    string
 	Route    string
 	Changes  []Change
+	Runs     []Run
 	Warnings []string
 }
 
 // Empty reports whether applying the plan would change nothing.
 func (p Plan) Empty() bool {
+	if len(p.Runs) > 0 {
+		return false
+	}
 	for _, c := range p.Changes {
 		if !c.noop() {
 			return false
@@ -80,6 +93,9 @@ func (p Plan) Diff() string {
 			continue
 		}
 		b.WriteString(udiff.Unified(path, path, string(c.Before), string(c.After)))
+	}
+	for _, r := range p.Runs {
+		fmt.Fprintf(&b, "run %s\n", r.Title)
 	}
 	return b.String()
 }
@@ -119,6 +135,17 @@ func (p Plan) Apply() error {
 			perm = 0o644
 		}
 		if err := config.WriteFileAtomic(c.Path, c.After, perm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RunAll takes the plan's steps in order, their output going to out, and
+// stops at the first that fails.
+func (p Plan) RunAll(ctx context.Context, out io.Writer) error {
+	for _, r := range p.Runs {
+		if err := r.Do(ctx, out); err != nil {
 			return err
 		}
 	}

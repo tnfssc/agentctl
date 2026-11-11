@@ -20,6 +20,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/codex"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/tomledit"
+	"github.com/tnfssc/agentctl/internal/tools"
 )
 
 // Status is an item and whether the agent's settings already match it.
@@ -179,7 +180,8 @@ const AllTitle = "Recommended setup"
 var Targets = []string{claude.Name, codex.Name, Instructions, Git}
 
 // PlanAll merges every target's recommended selection into one plan, the
-// risky items only when risky is set.
+// risky items only when risky is set, and installs the web search and MCP
+// tools the shared instructions point agents at.
 func PlanAll(risky bool) (agent.Plan, error) {
 	merged := agent.Plan{Agent: All}
 	for _, target := range Targets {
@@ -197,6 +199,9 @@ func PlanAll(risky bool) (agent.Plan, error) {
 		}
 		merged.Warnings = append(merged.Warnings, p.Warnings...)
 	}
+	runs, warnings := tools.Plan()
+	merged.Runs = runs
+	merged.Warnings = append(merged.Warnings, warnings...)
 	return merged, nil
 }
 

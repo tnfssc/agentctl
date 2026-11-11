@@ -23,8 +23,9 @@ func newTuneCmd() *cobra.Command {
 		Long: "Pick curated settings for Claude Code or Codex (fewer unused tools, no background spend, privacy\n" +
 			"without losing features), curated agent instructions, written to ~/.agents/AGENTS.md, or git settings\n" +
 			"that make agents' git work smoother, in your global git config. Unticking an item resets it to the\n" +
-			"default. Everything is recommended; `all` applies the whole set at once. Risky items (no approval\n" +
-			"prompts, no sandbox) need their own yes, or --risky.",
+			"default. Everything is recommended; `all` applies the whole set at once and installs the web search\n" +
+			"and MCP tools the instructions point at (`agentctl tools`). Risky items (no approval prompts, no\n" +
+			"sandbox) need their own yes, or --risky.",
 		Example: `  agentctl tune claude             # pick interactively
   agentctl tune codex --yes        # apply the recommended set
   agentctl tune instructions       # shared behavior for every agent

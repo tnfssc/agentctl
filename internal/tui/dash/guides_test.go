@@ -10,8 +10,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/testutil"
+	"github.com/tnfssc/agentctl/internal/tools"
 )
 
 func TestGuideOffersUndoOnceSetUp(t *testing.T) {
@@ -72,5 +74,24 @@ func TestMemoryIsABehaviorItem(t *testing.T) {
 	set.applied = []string{"memory"}
 	if d := set.memoryDetail(set.pal); !strings.Contains(d.facts[0], "memory-undo") || set.memoryState() != "limits set up" {
 		t.Fatalf("set up: %+v", d.facts)
+	}
+}
+
+func TestWebAndMCPInstallsUntilReady(t *testing.T) {
+	m := focusOn(base(t, 120, 40), "tools")
+	if d := m.detail(m.pal); d.buttons[0].id != "tools-install" || m.toolsState() != "not installed" {
+		t.Fatalf("missing tools offer Install first: %+v", d.buttons)
+	}
+	if m = send(t, m, keyPress("enter")); m.busy != "Planning" {
+		t.Fatal("opening the row presses Install")
+	}
+	ready := focusOn(base(t, 120, 40), "tools")
+	ready.tools = tools.Status{Web: "tvly", MCPC: true}
+	if d := ready.detail(ready.pal); d.buttons[0].id != "guide:tools" || ready.toolsState() != "installed" {
+		t.Fatalf("installed: %+v", d.buttons)
+	}
+	done := send(t, m, appliedMsg{plan: agent.Plan{Agent: tools.Name}})
+	if !strings.Contains(done.toast, "tools installed") {
+		t.Fatalf("toast %q", done.toast)
 	}
 }

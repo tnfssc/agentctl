@@ -58,26 +58,30 @@ func (m Model) memoryState() string {
 	return "no limits"
 }
 
-// toolsState is the sidebar's word for the web search and MCP guide.
+// toolsState is the sidebar's word for the web search and MCP tools.
 func (m Model) toolsState() string {
-	if m.setUp("tools") {
-		return "set up"
+	if m.tools.Ready() {
+		return "installed"
 	}
-	return "not set up"
+	return "not installed"
 }
 
-// toolsDetail is the Settings item for the web search and MCP guide.
+// toolsDetail is the Settings item for the web search and MCP tools, which
+// the recommended setup installs too; the guide is for Firecrawl and keys.
 func (m Model) toolsDetail(p skin.Palette) detailView {
 	d := detailView{
 		label:   "Settings · this machine",
 		heading: "Web search and MCP from the shell",
-		body: "Built-in web search fails through a proxy. Your coding agent installs a web search CLI (Tavily or " +
-			"Firecrawl) and mcpc, one skill each, without the vendors' extras.",
-		buttons: [3]button{{"Guide", "guide:tools", true}},
+		body: "Built-in web search fails through a proxy. Install puts in Tavily's CLI and mcpc, one skill each, " +
+			"without the vendors' extras. `tvly login` lifts Tavily's rate cap; the guide covers Firecrawl.",
+		buttons: [3]button{{"Install", "tools-install", true}, {"Guide", "guide:tools", false}},
 	}
-	d.facts[0] = fact(p, "state", "not set up")
+	if m.tools.Ready() {
+		d.buttons = [3]button{{"Guide", "guide:tools", true}}
+	}
+	d.facts[0] = fact(p, "state", m.tools.Summary())
 	if m.setUp("tools") {
-		d.facts[0] = fact(p, "state", "set up · undo with "+guide.Command(guide.Undo("tools")))
+		d.facts[1] = fact(p, "undo", guide.Command(guide.Undo("tools")))
 	}
 	return d
 }

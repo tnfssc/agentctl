@@ -43,7 +43,8 @@ guides like `signing` ("one-time setup"), each with an uninstall guide.
   a bunch of slop and plugins"); the CLI from its official package or release (Tavily: PyPI `tavily-cli`; Firecrawl:
   GitHub release tarball + `checksums.txt`; mcpc: npm `@apify/mcpc`), the skill folder from the repo skills.sh lists
   (`tavily-ai/skills` `skills/core/tavily-search`, `firecrawl/cli` `skills/firecrawl`, `apify/mcpc` `skills/mcpc` or
-  `mcpc help --skill`), not `npx skills add`. Keys are entered by the user in their own terminal.
+  `mcpc help --skill`), not `npx skills add`. Keys are entered by the user in their own terminal. Since 2026-11-11
+  agentctl installs Tavily's CLI and mcpc itself (`tools-install`); the guide covers Firecrawl and keys.
 - `setup` (2026-11-11): the wizard, an agent walking through proxies/routing, the recommended settings (risky items
   asked on their own), `tools`, then servers and the machine. No undo of its own; each step has one. Dashboard:
   Settings › Recommended has Apply (in-dashboard, with confetti) and Wizard (this guide).

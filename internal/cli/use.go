@@ -11,6 +11,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/app"
 	"github.com/tnfssc/agentctl/internal/config"
+	"github.com/tnfssc/agentctl/internal/tools"
 )
 
 func newUseCmd() *cobra.Command {
@@ -152,11 +153,15 @@ func confirmAndApply(ctx context.Context, u *ui, plan agent.Plan, st *config.Sta
 			return errors.New("cancelled")
 		}
 	}
-	if err := app.Apply(plan, st); err != nil {
+	if err := app.Apply(ctx, u.err, plan, st); err != nil {
 		return err
 	}
 	if plan.Agent == app.ModelLists {
 		u.ok("Model lists updated. Restart running sessions to pick them up.")
+		return nil
+	}
+	if plan.Agent == tools.Name {
+		u.ok("Web search and MCP tools installed. `tvly login` lifts Tavily's rate cap; new sessions see the skills.")
 		return nil
 	}
 	if plan.Route == "" {

@@ -29,6 +29,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/proxy"
 	"github.com/tnfssc/agentctl/internal/selfupdate"
 	"github.com/tnfssc/agentctl/internal/t3"
+	"github.com/tnfssc/agentctl/internal/tools"
 	"github.com/tnfssc/agentctl/internal/tui/skin"
 	"github.com/tnfssc/agentctl/internal/tui/theme"
 	"github.com/tnfssc/agentctl/internal/tune"
@@ -144,7 +145,8 @@ type Model struct {
 
 	guide   string   // guideDialog's topic
 	applied []string // guides whose setup is on record
-	recLeft int      // recommended items not applied yet
+	tools   tools.Status
+	recLeft int // recommended items not applied yet
 	// confetti counts down the frames of the celebration after the
 	// recommended setup is applied; nothing else animates but spinners.
 	confetti int
@@ -297,6 +299,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m.close("The recommended setup is on. Restart running sessions to pick it up.", false), load
 		}
+		if msg.plan.Agent == tools.Name {
+			return m.close("Web search and MCP tools installed. New sessions see the skills.", false), load
+		}
 		if msg.plan.Route == "" {
 			return m.close(title(msg.plan.Agent)+" settings updated. Restart running sessions to pick them up.", false), load
 		}
@@ -364,6 +369,7 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	first := !m.loaded
 	m.cfg, m.st, m.statuses, m.loaded = msg.cfg, msg.st, msg.statuses, true
 	m.signed, m.signingKey, m.applied, m.recLeft = msg.signed, msg.signingKey, msg.applied, msg.recLeft
+	m.tools = msg.tools
 	m.focus = min(m.focus, len(m.homeIDs())-1)
 	if !first {
 		return m, nil
@@ -464,7 +470,15 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 	case "memory":
 		return m.act("guide:memory")
 	case "tools":
-		return m.act("guide:tools")
+		for _, b := range m.toolsDetail(m.pal).buttons {
+			if b.primary {
+				return m.act(b.id)
+			}
+		}
+		return m, nil
+	case "tools-install":
+		m.busy = "Planning"
+		return m, planTools
 	case "guide":
 		return m.openGuide(arg), nil
 	case "t3":
@@ -603,6 +617,9 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 		return m, plan(m.ctx, m.cfg, m.st, m.req)
 	case "apply":
 		m.busy = "Applying"
+		if len(m.plan.Runs) > 0 {
+			m.busy = "Applying and installing"
+		}
 		return m, apply(m.ctx, m.plan, m.st)
 	case "test":
 		m.setProbe(m.proxy, nil)
@@ -1077,6 +1094,8 @@ func title(agentName string) string {
 		return tune.GitTitle
 	case tune.All:
 		return tune.AllTitle
+	case tools.Name:
+		return tools.Title
 	}
 	if a, err := app.FindAgent(agentName); err == nil {
 		return a.Title

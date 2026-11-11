@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/tnfssc/agentctl/internal/agent"
+	"github.com/tnfssc/agentctl/internal/tools"
 )
 
 // Key is the client key the fake proxy accepts.
@@ -31,6 +32,11 @@ func Home(t *testing.T) string {
 	prev := agent.Executable
 	agent.Executable = func() (string, error) { return "/opt/bin/agentctl", nil }
 	t.Cleanup(func() { agent.Executable = prev })
+	// The web search and MCP tools count as installed, so no plan installs
+	// anything from the real PATH; testutil.Tools fakes them instead.
+	prevTools := tools.Inspect
+	tools.Inspect = func() tools.Status { return tools.Status{Web: "tvly", MCPC: true} }
+	t.Cleanup(func() { tools.Inspect = prevTools })
 	return home
 }
 

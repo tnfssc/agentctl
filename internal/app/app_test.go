@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"maps"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ func TestRefreshRebuildsEveryRoutedList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := Apply(plan, st); err != nil {
+		if err := Apply(context.Background(), io.Discard, plan, st); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -38,8 +38,9 @@ Then commit signing, if commits aren't signed yet (`git config --global commit.g
 
 ## 3. Web search and MCP
 
-Built-in web search doesn't work through a proxy. `agentctl guide tools` sets up a web search CLI (Tavily or
-Firecrawl) with one skill and the user's key, and `mcpc` for MCP servers.
+Built-in web search doesn't work through a proxy. The recommended setup installed Tavily's CLI and `mcpc` with their
+skills; `agentctl tools --dry-run` shows anything still missing (`agentctl tools --yes` installs it). Offer
+`tvly login` in the user's own terminal to lift Tavily's rate cap, and `agentctl guide tools` if they want Firecrawl.
 
 ## 4. Servers and the machine
 

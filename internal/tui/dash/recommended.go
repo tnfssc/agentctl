@@ -26,14 +26,14 @@ func (m Model) recommendedDetail(p skin.Palette) detailView {
 	d := detailView{
 		label:   "Settings · recommended",
 		heading: "The recommended setup",
-		body: "Every curated setting for Claude Code and Codex, the shared instructions and git, in one reviewed " +
-			"diff: how agentctl's author runs agents. The risky ones (no approval prompts, no sandbox) ask first.",
+		body: "Every curated setting for Claude Code and Codex, the shared instructions and git, and the web " +
+			"search and MCP tools, in one reviewed diff: how agentctl's author runs agents. Risky ones ask first.",
 		buttons: [3]button{{"Apply", "rec-apply", true}, {"Wizard", "guide:setup", false}},
 	}
 	if m.recLeft == 0 {
 		d.heading = "Everything is on"
 	}
-	d.facts[0] = fact(p, "covers", "Claude Code, Codex, instructions, git")
+	d.facts[0] = fact(p, "covers", "Claude Code, Codex, instructions, git, tools")
 	d.facts[1] = fact(p, "left", fmt.Sprintf("%d items", m.recLeft))
 	return d
 }
