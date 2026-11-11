@@ -77,14 +77,14 @@ Media committed to a repo stays forever: attach screenshots/videos with ‵gh‵
 	},
 	{
 		ID: "links", Title: "Link every PR and ticket", Recommended: true,
-		Why:  "Every PR, ticket or thread the agent mentions comes with a clickable link, not a bare number.",
+		Why:  "Replies link every PR, ticket or thread they mention instead of a bare number; titles stay plain.",
 		Cost: "none",
 		Ops: []Op{section("links", `
 ## Links
 
-Every PR, issue, ticket or thread mentioned gets a clickable link, e.g. ‵[#123](https://github.com/org/repo/pull/123)‵
-or ‵[ENG-42](https://linear.app/...)‵, never a bare number or key: a bare one sends the reader searching. Don't know
-the URL? Look it up (‵gh pr view <n> --json url‵, ‵gh issue view‵, the tracker's CLI) before writing it.
+Replies and reports: every PR, issue, ticket or thread mentioned is a markdown link, not a bare number or key. URL
+unknown: look it up (‵gh pr view <n> --json url‵, tracker CLI). Titles, commit subjects, branch names: plain text,
+links don't render there.
 `)},
 	},
 	{
@@ -95,9 +95,8 @@ the URL? Look it up (‵gh pr view <n> --json url‵, ‵gh issue view‵, the t
 		Ops: []Op{section("web", `
 ## Web
 
-Search and read the web with the ‵tvly‵ (Tavily) or ‵firecrawl‵ CLI, whichever is installed, and its skill, not the
-built-in web search or fetch tools: those are unreliable and fail outright behind a proxy. ‵--json‵ output pipes into
-‵jq‵. Neither installed: say so, and suggest ‵agentctl guide tools‵.
+Web search and fetch: ‵tvly‵ (Tavily) or ‵firecrawl‵ CLI and its skill, not built-in web tools; those are unreliable
+and fail behind a proxy. ‵--json‵ pipes into ‵jq‵. Neither installed: say so, suggest ‵agentctl guide tools‵.
 `)},
 	},
 	{
@@ -108,9 +107,8 @@ built-in web search or fetch tools: those are unreliable and fail outright behin
 		Ops: []Op{section("mcp", `
 ## MCP
 
-Reach MCP servers through the ‵mcpc‵ CLI and its skill rather than adding them to an agent's config: connect once to a
-named ‵@session‵, then list and call tools from the shell (‵--json‵ for scripting). Tool definitions stay out of
-context until needed, and the same sessions work from every agent.
+MCP servers: ‵mcpc‵ CLI and its skill, not agent MCP config. Connect once to a named ‵@session‵, then list and call
+tools from the shell (‵--json‵ for scripts). Tool definitions stay out of context; sessions work from every agent.
 `)},
 	},
 	{

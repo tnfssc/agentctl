@@ -42,3 +42,7 @@ instead of built-in search, which fails behind a proxy) and `mcp` (`mcpc` instea
 `--only <ids>` (2026-11-11) turns on just those items and leaves the rest as they are, so a guide's agent can switch
 on e.g. the Web and MCP instructions without a person at the picker (`agentctl tune instructions --only web,mcp
 --yes`). It only turns things on; turning one off stays interactive (picker or dashboard).
+Instruction text (user, 2026-11-11, "absolutely garbage"): sections must read like the rest, terse fragments, and
+Links applies to replies and reports only: an agent obeying "every PR gets a link" put markdown links into PR titles
+and commit subjects, which don't render. Titles, commit subjects and branch names stay plain.
+
