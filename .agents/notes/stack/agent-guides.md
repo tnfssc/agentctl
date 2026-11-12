@@ -22,6 +22,13 @@ guides like `signing` ("one-time setup"), each with an uninstall guide.
   drop-ins on the parents. Confirmed on minipc 2026-11-10 (ssh as `tnfssc`): every parent was 0; fixed with
   `MemoryMin=2G` on `app.slice` (user) and `user.slice`, `user-.slice`, `user@.service` (system), live without restarts.
   Caps then set to agents 30/35 GB and Docker 12/16 GB (Docker already peaked at 16, agents at 45).
+- Agents' budget goes on `app-t3code.slice`, not `app-t3code-agents.slice` (found 2026-11-13, agents hit 40 GB on
+  minipc under a 35 GB cap). T3's server (`apps/server/src/process/agentScope.ts`) runs `systemctl --user set-property
+  --runtime` on every start: `MemoryHigh`=RAM−6G, `MemoryMax`=RAM−4G on the agents' slice, only
+  `CPUWeight`/`IOWeight`/`TasksMax` on the parent. Runtime values replace the drop-in's until the next
+  `daemon-reload`, so a check right after setup passes and the next T3 restart undoes it. The parent's limit covers
+  the agents' slice and T3's per-server `app-t3code-agents-<hash>.slice`; T3's server is under `app.slice`, outside it.
+  minipc moved to the parent (30/35/8 GB swap).
 - Tunnel with `cloudflared` alone: `tunnel login` (browser, picks one zone, writes `cert.pem`), `tunnel create`,
   `tunnel route dns`, a local `config.yml` ingress, then a hand-written macOS launch agent or Linux systemd user unit
   running `cloudflared tunnel run <UUID>`. Not `cloudflared service install` without a token: its launchd plist runs

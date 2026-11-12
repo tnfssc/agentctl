@@ -8,7 +8,7 @@ before. Show what you'll remove and ask before removing or restarting anything.
 Read `<records>/memory.md`: it lists every file created or changed, the values, and what they replaced. If it's
 missing, look for the usual places and confirm each with the user before touching it:
 
-- Linux: `99-*` drop-ins under `~/.config/systemd/user/*.d/` (e.g. `app-t3code-agents.slice.d`, `user.slice.d`,
+- Linux: `99-*` drop-ins under `~/.config/systemd/user/*.d/` (e.g. `app-t3code.slice.d`, `user.slice.d`,
   `t3code.service.d`, `app.slice.d`) and under `/etc/systemd/system/*.d/` (`user.slice.d`, `user-.slice.d`,
   `user@.service.d`), with memory settings in them; a `containers.slice` in `/etc/systemd/system/` and
   `cgroup-parent` in `/etc/docker/daemon.json`; agent wrappers in `~/.local/share/agentctl/agents-bin/` and the

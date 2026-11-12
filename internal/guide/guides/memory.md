@@ -43,6 +43,13 @@ drop-ins `99-<what>.conf` so they sort after T3 Code's own and win.
    The agents' slice is the one group every agent will share: T3 Code's agents' slice when T3 Code runs here (its
    name is T3 Code's, and a slice can't be moved under another), else a new `app-agents.slice`. Slices need no
    unit file; starting something in one creates it, and a drop-in sets its limits.
+
+   With T3 Code, put the memory limits on the agents' slice's parent, `app-t3code.slice`, not on the agents' slice
+   itself: every time T3 Code's server starts it sets `MemoryHigh` and `MemoryMax` on its agents' slice with
+   `systemctl --user set-property --runtime` (close to all of RAM), which replaces whatever a drop-in set there
+   until the next `daemon-reload`. On the parent it sets only CPU, IO and task limits, and a parent's memory limit
+   holds for every slice under it (the agents' slice and per-server ones like `app-t3code-agents-<hash>.slice`).
+   T3 Code's server runs outside it, under `app.slice`, so the cap doesn't reach the server.
 2. Pick sizes with the user, as shares of RAM, and keep the two caps together under about 85% so T3 Code's server,
    the desktop and the system always have room:
    - agents' slice, shared by every agent: `MemoryHigh` 55% (they slow down there), `MemoryMax` 65% (hard cap),
@@ -55,16 +62,16 @@ drop-ins `99-<what>.conf` so they sort after T3 Code's own and win.
    Round to whole gigabytes; the numbers below are an example, not for copying. Tell the user what happens: near
    `MemoryHigh` work slows down and can look hung; at a cap Linux kills the largest process in that group, usually
    a test runner or browser rather than the agent; their own containers share the Docker cap. With systemd-oomd on,
-   explain that it may kill a whole session first, and offer `ManagedOOMMemoryPressure=auto` in the agents' slice
-   drop-in if they'd rather rely on the caps.
-3. Write the drop-ins, e.g. `~/.config/systemd/user/app-t3code-agents.slice.d/99-memory-budget.conf`:
+   explain that it may kill a whole session first, and offer `ManagedOOMMemoryPressure=auto` in the agents'
+   budget drop-in if they'd rather rely on the caps.
+3. Write the drop-ins, e.g. `~/.config/systemd/user/app-t3code.slice.d/99-memory-budget.conf`:
    ```ini
    [Slice]
    MemoryHigh=36G
    MemoryMax=44G
    MemorySwapMax=8G
    ```
-   (or `app-agents.slice.d/` without T3 Code) and `~/.config/systemd/user/t3code.service.d/99-memory-guarantee.conf`
+   (or `app-agents.slice.d/` without T3 Code; never `app-t3code-agents.slice.d/`, see step 1) and `~/.config/systemd/user/t3code.service.d/99-memory-guarantee.conf`
    with `[Service]` `MemoryMin=6G` (sized as in step 2).
 4. Put agents started outside T3 Code in the same slice. A process stays in the cgroup it was started in, so
    `claude`, `codex`, `opencode` and `pi` run from a terminal land in that terminal's group, uncapped. Wrap each
@@ -152,6 +159,9 @@ every shell or environment file you added the `PATH` line to, and anything you r
 
 - A value doesn't show up: a later drop-in or the unit itself overrides it; `systemctl --user cat <unit>` lists
   every file in order.
+- A value was right and later wasn't: something set it at runtime (`systemctl --user set-property --runtime`, files
+  under `$XDG_RUNTIME_DIR/systemd/user.control/`); T3 Code does that to its agents' slice on every start (step 1).
+  Move the limit to a parent nothing else sets.
 - `MemorySwapMax` has no effect: swap accounting is off in the kernel (`swapaccount=0`), or there's no swap.
 - The cap is reached all the time: the share is too small for this user's work; raise it with them rather than
   removing it.
