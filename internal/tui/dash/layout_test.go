@@ -304,6 +304,20 @@ func dialogStates(t *testing.T, m Model) []state {
 	add("pair form opencode", ocForm)
 	add("pair form opencode error", send(t, ocForm, pairedMsg{err: errors.New(strings.Repeat("no ", 50))}))
 	add("pairing opencode", send(t, ocForm, pairedMsg{pairing: t3.Pairing{URL: "https://box.tail035df.ts.net/auth/connect/I0wuzPtW0raVKaWaAoHj_A", Expires: time.Now().Add(5 * time.Minute)}}))
+	cp := focusOn(send(t, m, cpStates()["running"]), "cliproxy")
+	add("cliproxy keys", send(t, cp, click("cp-keys")))
+	add("cliproxy keys second", send(t, cp, click("cp-keys"), keyPress("right")))
+	add("cliproxy keys unknown", send(t, focusOn(send(t, m, cpStates()["no mgmt copy"]), "cliproxy"), click("cp-keys")))
+	add("cliproxy server", send(t, cp, click("cp-server")))
+	add("cliproxy login", send(t, cp, click("cp-login")))
+	add("cliproxy claude warning", send(t, cp, click("cp-login:claude")))
+	add("cliproxy remove key", send(t, cp, click("cp-server"), click("m:opt:5")))
+	add("cliproxy ask", send(t, cp, click("cp-server"), click("m:opt:1")))
+	cpForm := send(t, focusOn(send(t, m, cpStates()["not installed"]), "cliproxy"), click("cp-install"))
+	add("cliproxy install", cpForm)
+	cpBad := cpForm
+	cpBad.inputs[0].SetValue("99999")
+	add("cliproxy install error", send(t, cpBad, click("m:submit-pair")))
 	return out
 }
 

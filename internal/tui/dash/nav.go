@@ -36,6 +36,7 @@ func (m Model) navEntries(p skin.Palette) []navEntry {
 	out = append(out,
 		serverEntry(p, "t3", "T3 Code", m.t3State(), m.t3State()),
 		serverEntry(p, "opencode", "OpenCode web", m.ocState(), m.ocNavDetail()),
+		serverEntry(p, "cliproxy", "CLIProxyAPI", m.cpState(), m.cpNavDetail()),
 	)
 	for _, n := range m.cfg.Names() {
 		out = append(out, navEntry{id: "proxy:" + n, section: "Proxies", icon: "●", label: n, detail: m.proxyState(n), dot: m.proxyDot(p, n)})

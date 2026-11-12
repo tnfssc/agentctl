@@ -36,6 +36,7 @@ type Config struct {
 	Proxies  map[string]Proxy `toml:"proxies"`
 	T3       T3               `toml:"t3,omitempty"`
 	OpenCode OpenCode         `toml:"opencode,omitempty"`
+	CLIProxy CLIProxy         `toml:"cliproxy,omitempty"`
 }
 
 // T3 holds agentctl's settings for the T3 Code server on this machine.
@@ -50,6 +51,14 @@ type OpenCode struct {
 	// URL is where other devices reach the server, used in pairing links.
 	// Empty means the address the server listens on.
 	URL string `toml:"url,omitempty"`
+}
+
+// CLIProxy holds agentctl's settings for the CLIProxyAPI server it runs on
+// this machine.
+type CLIProxy struct {
+	// Proxy is the proxy entry that points at it, kept in step when its
+	// client keys change.
+	Proxy string `toml:"proxy,omitempty"`
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)

@@ -89,7 +89,7 @@ func (m Model) View() tea.View {
 	// remote sessions get clicks and the wheel only.
 	v.MouseMode = tea.MouseModeAllMotion
 	switch {
-	case m.dialog == pairDialog:
+	case m.dialog == pairDialog || m.dialog == cpKeysDialog:
 		// The terminal keeps the mouse, so the link can be selected and
 		// copied; the dialog's keys still work.
 		v.MouseMode = tea.MouseModeNone
@@ -252,6 +252,7 @@ var hintTexts = map[dialog]string{
 	serviceDialog:  "↑↓ · enter choose · esc back",
 	guideDialog:    "c copy · u copy undo · enter",
 	allowDialog:    "space toggle · y save · esc",
+	cpKeysDialog:   "a / m copy · ←→ keys · enter done",
 }
 
 var maxHintWidth = func() int {
@@ -338,6 +339,8 @@ func (m Model) detail(p skin.Palette) detailView {
 		return m.t3Detail(p)
 	case "opencode":
 		return m.ocDetail(p)
+	case "cliproxy":
+		return m.cpDetail(p)
 	case "git":
 		return m.gitDetail(p)
 	case "updates":
@@ -695,11 +698,18 @@ func (m Model) drawDialog(sc *scene) {
 		m.drawGuide(sc)
 	case allowDialog:
 		m.drawAllow(sc)
+	case cpKeysDialog:
+		m.drawCPKeys(sc)
 	case serviceDialog:
-		if m.svc == svcOpenCode {
+		switch m.svc {
+		case svcCLIProxy:
+			heading, note := m.cpMenuText()
+			m.panel(sc, "CLIProxyAPI · "+m.cpMenu, heading, nil, cancel, nil)
+			text([]string{skin.Fg(p.Muted).Render(note)})
+		case svcOpenCode:
 			m.panel(sc, "OpenCode web · server", "Background server", nil, cancel, nil)
 			text([]string{skin.Fg(p.Muted).Render("Started on demand by opencode, not at boot; it serves the web app and the TUI.")})
-		} else {
+		default:
 			m.panel(sc, "T3 Code · service", "Background service", nil, cancel, nil)
 			text([]string{skin.Fg(p.Muted).Render("Runs T3 Code at boot under systemd or launchd; data in " + tildePath(m.t3.Home) + ".")})
 		}

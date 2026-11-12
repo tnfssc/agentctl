@@ -23,8 +23,11 @@ const svcT3 = "t3"
 
 // svcTitle names the app the shared ask, server and pairing dialogs act on.
 func (m Model) svcTitle() string {
-	if m.svc == svcOpenCode {
+	switch m.svc {
+	case svcOpenCode:
 		return "OpenCode web"
+	case svcCLIProxy:
+		return "CLIProxyAPI"
 	}
 	return "T3 Code"
 }
@@ -423,8 +426,11 @@ func (m Model) openPairForm() (tea.Model, tea.Cmd) {
 
 func (m Model) submitPair() (tea.Model, tea.Cmd) {
 	m.pressed = "m:submit-pair"
-	if m.svc == svcOpenCode {
+	switch m.svc {
+	case svcOpenCode:
 		return m.submitOCPair()
+	case svcCLIProxy:
+		return m.submitCPInstall()
 	}
 	base, err := t3.NormalizeURL(m.inputs[1].Value())
 	if err != nil {
@@ -494,6 +500,10 @@ func (m Model) drawDevices(sc *scene) {
 }
 
 func (m Model) drawPairForm(sc *scene) {
+	if m.svc == svcCLIProxy {
+		m.drawCPInstallForm(sc)
+		return
+	}
 	m.panel(sc, m.svcTitle()+" · pair a device", "Make a one-time pairing link", nil,
 		&button{"Cancel", "m:cancel", false}, &button{"Make link", "m:submit-pair", true})
 	labels, hints := []string{"Device", "Address"}, []string{"shown in the devices list", "how the new device reaches this machine"}

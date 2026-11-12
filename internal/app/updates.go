@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tnfssc/agentctl/internal/cliproxy"
 	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/selfupdate"
 	"github.com/tnfssc/agentctl/internal/t3"
@@ -31,7 +32,7 @@ type Update struct {
 // UpdateNames are the tools `agentctl update` knows, in the order "all"
 // updates them: agents, then servers, then agentctl itself, which replaces
 // the running binary.
-var UpdateNames = []string{"claude", "codex", "opencode", "pi", "t3", "agentctl"}
+var UpdateNames = []string{"claude", "codex", "opencode", "pi", "t3", "cliproxy", "agentctl"}
 
 // CLIUpdate describes an agent CLI that updates itself.
 func CLIUpdate(s upgrade.Status) Update {
@@ -65,6 +66,20 @@ func T3Update(st t3.Status) Update {
 		Name: "t3", Title: "T3 Code", Current: st.CurrentVersion(), Latest: st.Latest, Err: st.LatestErr,
 		Installed: st.Installed(), Worth: st.Installed() && st.UpdateAvailable(), Run: t3.Update,
 		Note: "its service restarts, stopping running turns",
+	}
+}
+
+// CLIProxyUpdate describes the CLIProxyAPI agentctl runs here, which
+// restarts on the new release.
+func CLIProxyUpdate(st cliproxy.Status) Update {
+	return Update{
+		Name: "cliproxy", Title: cliproxy.Title, Current: st.Version, Latest: st.Latest, Err: st.LatestErr,
+		Installed: st.Installed, Worth: st.UpdateAvailable(),
+		Run: func(ctx context.Context, out io.Writer) error {
+			_, err := cliproxy.Update(ctx, out)
+			return err
+		},
+		Note: "it restarts; requests in flight fail",
 	}
 }
 
@@ -111,6 +126,16 @@ func CheckUpdates(ctx context.Context, version string, names []string) []Update 
 		wg.Go(func() {
 			st, err := t3.Inspect(ctx)
 			u := T3Update(st)
+			if err != nil {
+				u.Err = err
+			}
+			set(u)
+		})
+	}
+	if slices.Contains(names, "cliproxy") {
+		wg.Go(func() {
+			st, err := cliproxy.Inspect(ctx, true)
+			u := CLIProxyUpdate(st)
 			if err != nil {
 				u.Err = err
 			}

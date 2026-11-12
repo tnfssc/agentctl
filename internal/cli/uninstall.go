@@ -11,6 +11,7 @@ import (
 
 	"github.com/tnfssc/agentctl/internal/agent"
 	"github.com/tnfssc/agentctl/internal/app"
+	"github.com/tnfssc/agentctl/internal/cliproxy"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/guide"
 	"github.com/tnfssc/agentctl/internal/selfupdate"
@@ -57,6 +58,9 @@ func leftovers(cmd *cobra.Command) ([]leftover, error) {
 	}
 	if st, err := t3.Inspect(cmd.Context()); err == nil && st.ServiceInstalled {
 		out = append(out, leftover{"T3 Code's background service", "agentctl t3 uninstall"})
+	}
+	if st, err := cliproxy.Inspect(cmd.Context(), false); err == nil && st.Service {
+		out = append(out, leftover{"CLIProxyAPI's background service", "agentctl cliproxy uninstall"})
 	}
 	for _, topic := range guide.Applied() {
 		out = append(out, leftover{

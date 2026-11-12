@@ -24,6 +24,7 @@ import (
 	"github.com/tnfssc/agentctl/internal/agent/claude"
 	"github.com/tnfssc/agentctl/internal/agent/opencode"
 	"github.com/tnfssc/agentctl/internal/app"
+	"github.com/tnfssc/agentctl/internal/cliproxy"
 	"github.com/tnfssc/agentctl/internal/config"
 	"github.com/tnfssc/agentctl/internal/ocweb"
 	"github.com/tnfssc/agentctl/internal/proxy"
@@ -56,6 +57,7 @@ const (
 	serviceDialog         // T3 Code's service or OpenCode's server menu
 	guideDialog           // the command that hands a setup guide to an agent
 	allowDialog           // which unverified models of a proxy every agent may use
+	cpKeysDialog          // CLIProxyAPI's API and management keys
 )
 
 // page is what the compact layout shows when no dialog is open.
@@ -177,7 +179,13 @@ type Model struct {
 	oc       ocweb.Status
 	ocErr    error
 	ocLoaded bool
-	svc      string // whose ask, service and pairing dialogs are open: svcT3 or svcOpenCode
+	svc      string // whose ask, service and form dialogs are open: svcT3, svcOpenCode or svcCLIProxy
+
+	cp       cliproxy.Status
+	cpErr    error
+	cpLoaded bool
+	cpMenu   string // which list serviceDialog shows for CLIProxyAPI
+	keyPick  int    // API key shown in cpKeysDialog
 
 	inputs  []textinput.Model
 	field   int    // focused input in addDialog and pairFormDialog
@@ -208,7 +216,7 @@ func (m *Model) setPalette(isDark bool) {
 
 // Init loads config, asks for the background color and looks for updates.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx), inspectCLIs(m.ctx)}
+	cmds := []tea.Cmd{tea.RequestBackgroundColor, load, inspectT3(m.ctx), inspectOC(m.ctx), inspectCP(m.ctx), inspectCLIs(m.ctx)}
 	if m.release() {
 		cmds = append(cmds, checkSelf(m.ctx))
 	}
@@ -344,6 +352,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onT3(msg)
 	case ocLoadedMsg, ocDoneMsg:
 		return m.onOC(msg)
+	case cpLoadedMsg, cpDoneMsg, cpLoginMsg:
+		return m.onCP(msg)
 	case selfCheckedMsg, clisMsg, updStepMsg:
 		return m.onUpdates(msg)
 	case tea.KeyPressMsg:
@@ -366,15 +376,26 @@ func (m Model) onLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.toast, m.toastErr = msg.err.Error(), true
 		return m, nil
 	}
-	first := !m.loaded
+	first, old := !m.loaded || m.cfg == nil, m.cfg
 	m.cfg, m.st, m.statuses, m.loaded = msg.cfg, msg.st, msg.statuses, true
 	m.signed, m.signingKey, m.applied, m.recLeft = msg.signed, msg.signingKey, msg.applied, msg.recLeft
 	m.tools = msg.tools
 	m.focus = min(m.focus, len(m.homeIDs())-1)
-	if !first {
-		return m, nil
+	if first {
+		return m, m.probeAll()
 	}
-	return m, m.probeAll()
+	// Proxies added or changed elsewhere (CLIProxyAPI's install attaches
+	// one, removing its key moves another) get checked like new ones.
+	var cmds []tea.Cmd
+	for _, name := range m.cfg.Names() {
+		p := m.cfg.Proxies[name]
+		if was, ok := old.Proxies[name]; ok && was.URL == p.URL && was.Key == p.Key && was.KeyCmd == p.KeyCmd {
+			continue
+		}
+		m.setProbe(name, nil)
+		cmds = append(cmds, probe(m.ctx, name, p))
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) probeAll() tea.Cmd {
@@ -496,6 +517,13 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "cliproxy":
+		for _, b := range m.cpDetail(m.pal).buttons {
+			if b.primary {
+				return m.act(b.id)
+			}
+		}
+		return m, nil
 	case "recommended":
 		return m.act("rec-apply")
 	case "rec-apply":
@@ -515,6 +543,9 @@ func (m Model) act(id string) (tea.Model, tea.Cmd) {
 		return m.actT3(verb)
 	case "oc-start", "oc-restart", "oc-update", "oc-remote", "oc-signout", "oc-stop", "oc-server", "oc-pair":
 		return m.actOC(verb)
+	case "cp-install", "cp-start", "cp-keys", "cp-server", "cp-login", "cp-rmkeys", "cp-rmkey", "cp-addkey", "cp-restart",
+		"cp-update", "cp-listen-all", "cp-listen-local", "cp-rotate", "cp-stop", "cp-uninstall", "cp-uninstall-all":
+		return m.actCP(verb, arg)
 	case "agent", "switch":
 		return m.openRoutes(m.statusOf(arg))
 	case "proxy", "details":
@@ -543,13 +574,13 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	verb, arg, _ := strings.Cut(id, ":")
 	switch verb {
 	case "close-btn":
-		if m.dialog == pairDialog && m.svc != svcOpenCode { // back to the list, which now shows the link
+		if m.dialog == pairDialog && m.svc == svcT3 { // back to the list, which now shows the link
 			m.busy = "Loading devices"
 			return m, listAccess(m.ctx)
 		}
 		return m.close("", false), nil
 	case "close", "cancel":
-		if (m.dialog == askDialog && m.ask.reopen) || (m.dialog == pairFormDialog && m.svc != svcOpenCode) {
+		if (m.dialog == askDialog && m.ask.reopen) || (m.dialog == pairFormDialog && m.svc == svcT3) {
 			m.dialog = devicesDialog
 			return m, nil
 		}
@@ -574,6 +605,10 @@ func (m Model) actDialog(id string) (tea.Model, tea.Cmd) {
 	case "copy":
 		m.toast, m.toastErr = "Copied the link", false
 		return m, tea.SetClipboard(m.pairing.URL)
+	case "cp-copy-api":
+		return m.cpCopy("api")
+	case "cp-copy-mgmt":
+		return m.cpCopy("mgmt")
 	case "copy-guide":
 		return m.copyGuide(m.guide)
 	case "copy-undo":
@@ -817,6 +852,8 @@ func (m Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.close("", false), nil
 		}
 		return m, nil
+	case cpKeysDialog:
+		return m.onCPKeysKey(k)
 	case pairDialog:
 		switch k {
 		case "c":

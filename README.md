@@ -34,7 +34,7 @@ Downloads the matching binary, verifies its SHA-256 checksum and installs to `~/
 Add that directory to your PATH if needed, then run `agentctl`. Update with `agentctl update` (from v1.1.0; before
 that, run the install command again). `agentctl update all` also updates the agents' CLIs and the servers, each
 through its own updater (`claude update`, `codex update`, `opencode upgrade`, `pi update --all` with Pi's extensions,
-`t3 update`); `--check` only lists what's out of date. In the dashboard each agent's page has an Update button, and
+`t3 update`, and CLIProxyAPI's newest GitHub release when agentctl runs one); `--check` only lists what's out of date. In the dashboard each agent's page has an Update button, and
 Settings › Updates has Update all.
 
 For a specific version or install directory:
@@ -51,7 +51,7 @@ go install github.com/tnfssc/agentctl/cmd/agentctl@latest
 ```
 
 To remove it, run `agentctl uninstall`. It first lists what agentctl set up that stays behind (agents routed through a
-proxy, which stop working without it, curated settings, T3 Code's service, setups your agent did from a guide) with the
+proxy, which stop working without it, curated settings, T3 Code's and CLIProxyAPI's services, setups your agent did from a guide) with the
 command that undoes each, and offers to open the dashboard to undo them. Then it deletes the binary, and with
 `--purge` (or if you say yes) `~/.config/agentctl` with your proxies' keys.
 
@@ -151,6 +151,31 @@ agentctl opencode restart | stop
 The server listens on 127.0.0.1; put something like Tailscale Serve or a Cloudflare Tunnel (`agentctl guide tunnel`)
 in front of it for other devices.
 
+### CLIProxyAPI
+
+agentctl can also run a CLIProxyAPI server on this machine (CLIProxyAPI under Servers in the dashboard). It installs
+the newest GitHub release (checked against the release's checksums), runs it at login under launchd or `systemd
+--user`, and attaches it as proxy `cliproxy`:
+
+```sh
+agentctl cliproxy install            # --port 8318 --name box to change either
+agentctl cliproxy                    # running?, version, address, logins
+agentctl cliproxy login              # add an account: Codex, Antigravity, xAI, Kimi, Devin, Meta, Claude
+agentctl cliproxy keys               # the API keys and the management key
+agentctl cliproxy keys --management  # one key alone, for pipes; --api for the first API key
+agentctl cliproxy keys add | rm <key> | rotate-management
+agentctl cliproxy listen all         # every interface; `listen local` (default) is 127.0.0.1 only
+agentctl cliproxy update | restart | stop | start
+agentctl cliproxy uninstall          # keeps config and keys; --all deletes them and the proxy entry
+```
+
+A new install gets one fresh API key and a management key. CLIProxyAPI keeps only a hash of the management key once it
+starts, so agentctl keeps the plaintext in `~/.config/agentctl/keys/` to show it later; the management panel is at
+`http://127.0.0.1:8317/management.html`. Logins live in CLIProxyAPI's own `~/.cli-proxy-api` and survive uninstalls.
+Over SSH a login prints a link; sign in on any device, then paste back the URL the browser ends on. Claude asks first:
+routing a Claude subscription through a proxy breaks Anthropic's terms, and Anthropic blocks such logins and can ban
+the account.
+
 ## Develop
 
 Tools are pinned in `mise.toml`.
@@ -176,6 +201,7 @@ internal/agent/pi      models.json and settings.json routing
 internal/jsonc/        comment-preserving JSONC edits
 internal/t3/           T3 Code through its t3 CLI
 internal/ocweb/        OpenCode's web server through its opencode CLI
+internal/cliproxy/     CLIProxyAPI on this machine: release, launchd/systemd unit, config and keys
 internal/models/       which models count as Anthropic
 internal/proxy/        CLIProxyAPI client
 internal/tomledit/     comment-preserving TOML edits

@@ -1,8 +1,9 @@
 # agentctl
 
 Go CLI that routes Claude Code, Codex, OpenCode (v2) and Pi to their own login or to CLIProxyAPI servers, and runs
-T3 Code and OpenCode's web server on the same machine. Module `github.com/tnfssc/agentctl`, binary `agentctl`.
-Decisions and research live in `.agents/notes/`; read the notes for a feature before changing it.
+T3 Code, OpenCode's web server and a CLIProxyAPI server on the same machine. Module `github.com/tnfssc/agentctl`,
+binary `agentctl`. Decisions and research live in `.agents/notes/`; read the notes for a feature before changing
+it.
 
 ## Rules that are product decisions
 
@@ -23,6 +24,11 @@ Decisions and research live in `.agents/notes/`; read the notes for a feature be
   service and agentctl writes no unit for it. Run real `opencode service ...` only with `XDG_CONFIG_HOME`,
   `XDG_STATE_HOME` and `XDG_DATA_HOME` in `.tmp/` and a spare port (`opencode service set port`); tests use
   `testutil.OpenCode`, a fake `opencode`.
+- agentctl owns its CLIProxyAPI install (`internal/cliproxy`): upstream has no service manager, so agentctl writes
+  the launchd agent / systemd user unit and the config. Never run `agentctl cliproxy` install/start/stop against a real
+  `HOME` while developing: it loads a real launchd/systemd service. Point `HOME`, `XDG_CONFIG_HOME` and
+  `XDG_DATA_HOME` into `.tmp/`, put the env first so a failed build can't skip it, and fake `launchctl`/`systemctl`
+  (tests use `testutil.CLIProxy`).
 
 ## Tooling
 

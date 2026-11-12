@@ -64,6 +64,9 @@ func (m Model) updates() []app.Update {
 	if m.t3Loaded {
 		out = append(out, app.T3Update(m.t3))
 	}
+	if m.cpLoaded {
+		out = append(out, app.CLIProxyUpdate(m.cp))
+	}
 	if m.release() && m.selfChecked {
 		u := app.SelfUpdate(m.version, m.selfLatest, m.selfErr)
 		u.Worth = u.Worth && m.selfUpdated == ""
@@ -85,7 +88,7 @@ func (m Model) updateFor(name string) (app.Update, bool) {
 
 // checking reports whether any tool's newest version is still unknown.
 func (m Model) checking() bool {
-	return !m.clisLoaded || !m.ocLoaded || !m.t3Loaded || (m.release() && !m.selfChecked)
+	return !m.clisLoaded || !m.ocLoaded || !m.t3Loaded || !m.cpLoaded || (m.release() && !m.selfChecked)
 }
 
 // news counts tools with a newer release.
@@ -156,7 +159,7 @@ func (m Model) onUpdStep(msg updStepMsg) (Model, tea.Cmd) {
 			toast, isErr = strings.Join(m.updFailed, "; "), true
 		}
 		m.clisLoaded = false
-		cmds := []tea.Cmd{inspectCLIs(m.ctx), inspectOC(m.ctx), inspectT3(m.ctx)}
+		cmds := []tea.Cmd{inspectCLIs(m.ctx), inspectOC(m.ctx), inspectT3(m.ctx), inspectCP(m.ctx)}
 		return m.close(toast, isErr), tea.Batch(cmds...)
 	}
 }
@@ -217,7 +220,7 @@ func (m Model) actUpdates(verb, arg string) (tea.Model, tea.Cmd) {
 		}
 	case "upd-check":
 		m.clisLoaded, m.checkingAgain = false, true
-		cmds := []tea.Cmd{inspectCLIs(m.ctx), inspectOC(m.ctx), inspectT3(m.ctx)}
+		cmds := []tea.Cmd{inspectCLIs(m.ctx), inspectOC(m.ctx), inspectT3(m.ctx), inspectCP(m.ctx)}
 		if m.release() {
 			m.selfChecked, m.selfErr = false, nil
 			cmds = append(cmds, checkSelf(m.ctx))
