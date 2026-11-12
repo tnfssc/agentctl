@@ -11,7 +11,9 @@ with the actual numbers and ask before writing anything.
 ## Look first
 
 - `uname -s` and the RAM and swap: `free -g` on Linux, `sysctl hw.memsize` and `sysctl vm.swapusage` on macOS.
-- `agentctl t3 status` and `agentctl opencode status`: which servers run here.
+- `agentctl t3 status` and `agentctl opencode status`: which servers run here. If T3 Code runs, the size of its
+  database (`du -ch ~/.t3/userdata/*.sqlite*`, or under `T3CODE_HOME`): the server reads it all the time, so its
+  memory guarantee has to fit it (step 2).
 - Which agents are installed and where they come from: `command -v claude codex opencode pi` (and every match with
   `which -a`), so wrappers can find the real ones.
 - Docker: `docker info` (rootless shows `rootless` under Security Options; Docker Desktop, OrbStack, Colima and
@@ -46,7 +48,10 @@ drop-ins `99-<what>.conf` so they sort after T3 Code's own and win.
    - agents' slice, shared by every agent: `MemoryHigh` 55% (they slow down there), `MemoryMax` 65% (hard cap),
      `MemorySwapMax` 8G or less if swap is smaller (zram swap lives in RAM too);
    - Docker containers: `MemoryHigh` 15%, `MemoryMax` 20%, or more if they already use more (step "Look first");
-   - T3 Code's server, if it runs here: `MemoryMin` 2G, so reclaim never starves it.
+   - T3 Code's server, if it runs here: `MemoryMin` of its database's size plus about 2G for the server itself,
+     rounded up with room to grow. Anything less and, whenever agents fill memory, Linux drops the cached database
+     pages; the server reads them back from disk, stalls on IO and throttles its sockets, so T3 Code lags and drops
+     connections while CPU and memory pressure look fine. Count it against the 85% too.
    Round to whole gigabytes; the numbers below are an example, not for copying. Tell the user what happens: near
    `MemoryHigh` work slows down and can look hung; at a cap Linux kills the largest process in that group, usually
    a test runner or browser rather than the agent; their own containers share the Docker cap. With systemd-oomd on,
@@ -60,7 +65,7 @@ drop-ins `99-<what>.conf` so they sort after T3 Code's own and win.
    MemorySwapMax=8G
    ```
    (or `app-agents.slice.d/` without T3 Code) and `~/.config/systemd/user/t3code.service.d/99-memory-guarantee.conf`
-   with `[Service]` `MemoryMin=2G`.
+   with `[Service]` `MemoryMin=6G` (sized as in step 2).
 4. Put agents started outside T3 Code in the same slice. A process stays in the cgroup it was started in, so
    `claude`, `codex`, `opencode` and `pi` run from a terminal land in that terminal's group, uncapped. Wrap each
    installed one in a small script in its own directory, e.g. `~/.local/share/agentctl/agents-bin/claude`, that
@@ -150,3 +155,8 @@ every shell or environment file you added the `PATH` line to, and anything you r
 - `MemorySwapMax` has no effect: swap accounting is off in the kernel (`swapaccount=0`), or there's no swap.
 - The cap is reached all the time: the share is too small for this user's work; raise it with them rather than
   removing it.
+- T3 Code still lags under load with high `io.pressure` in its server's cgroup: compare `workingset_refault_file`
+  in its `memory.stat` with `rios` in its `io.stat`. If they're close, it's re-reading what reclaim took; its
+  database outgrew `MemoryMin` (or a parent's), so raise them all. `IOWeight` won't help on its own: it applies only
+  under the `bfq` scheduler or with `io.cost` on (`/sys/block/<disk>/queue/scheduler`, `/sys/fs/cgroup/io.cost.qos`),
+  and most NVMe setups have neither; enabling either is a system change that needs sudo and the user's OK.
