@@ -1,11 +1,13 @@
 """A stand-in CLIProxyAPI for recording the demo: health, and a model list
-that, like the real proxy, disguises non-Claude ids for Claude clients."""
+that, like the real proxy, disguises non-Claude ids for Claude clients. It
+also answers T3 Code's environment probe for the fake T3 Code server."""
 
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 KEY = "sk-demo"
+T3_VERSION = "0.1.8-nightly.20261111.4420"
 MODELS = {
     "claude-opus-5-5": "anthropic",
     "claude-sonnet-5-5": "anthropic",
@@ -22,6 +24,8 @@ class Proxy(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/healthz":
             return self.send({"status": "ok"})
+        if self.path == "/.well-known/t3/environment":
+            return self.send({"label": "studio", "serverVersion": T3_VERSION})
         if self.path.startswith("/v1/models"):
             if self.headers.get("Authorization") != "Bearer " + KEY:
                 return self.send({"error": "invalid api key"}, 401)

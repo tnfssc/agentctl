@@ -8,7 +8,7 @@
 
 Switch coding agents between their own login and [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) servers.
 
-![agentctl: testing a proxy, routing Codex and OpenCode to it from the dashboard, then checking the status](https://github.com/tnfssc/agentctl/releases/download/v1.0.0/demo.gif)
+![agentctl: testing a proxy, routing Codex and OpenCode to it from the dashboard, then checking the status](https://github.com/tnfssc/agentctl/releases/download/v1.6.0/demo.gif)
 
 Works with Claude Code, Codex, [OpenCode](https://opencode.ai) (v2) and [Pi](https://pi.dev).
 
@@ -58,6 +58,8 @@ command that undoes each, and offers to open the dashboard to undo them. Then it
 ## Use
 
 Run `agentctl` in a terminal for the dashboard (it also works over SSH from a phone, down to 40×16) showing where each agent is routed and which proxies work.
+
+<img src="https://github.com/tnfssc/agentctl/releases/download/v1.6.0/phone.gif" width="360" alt="the compact dashboard on a phone-sized terminal: the home list, a server's page">
 Click (or use the keyboard) to switch routes, add, test or remove proxies, and refresh model lists.
 
 The same things from the command line:
@@ -91,6 +93,8 @@ remote branches. Unticking an item, or "Reset to default", puts the defaults bac
 written. Everything is recommended: `agentctl tune all` (Settings › Recommended) applies the whole set at once. The two
 risky items, no approval prompts for Claude Code and no sandbox for Codex, ask separately, or take `--risky`.
 
+![Settings › Claude Code: tick curated settings, review the diff, apply](https://github.com/tnfssc/agentctl/releases/download/v1.6.0/tune.gif)
+
 agentctl doesn't touch signing keys. `agentctl guide signing` prints instructions for your coding agent instead: paste
 the command into it and it walks you through the key, git and GitHub. Other one-time setups work the same way, each
 with an undo guide, and the dashboard shows the command to paste:
@@ -117,6 +121,8 @@ models.
 
 ### T3 Code
 
+![T3 Code under Servers: the paired devices, then a one-time pairing link with its QR code](https://github.com/tnfssc/agentctl/releases/download/v1.6.0/t3.gif)
+
 agentctl also runs [T3 Code](https://github.com/pingdotgg/t3code) on the same machine, on the nightly channel, as a
 background service (T3 Code under Servers in the dashboard):
 
@@ -135,6 +141,8 @@ Everything goes through T3 Code's own `t3` CLI, so updates started from a T3 Cod
 
 ### OpenCode web
 
+![OpenCode web: status, a pairing link with its QR code, the server menu](https://github.com/tnfssc/agentctl/releases/download/v1.6.0/opencode.gif)
+
 OpenCode v2 runs a background server that also serves its web app. agentctl drives it through `opencode` (OpenCode web
 under Servers in the dashboard):
 
@@ -152,6 +160,8 @@ The server listens on 127.0.0.1; put something like Tailscale Serve or a Cloudfl
 in front of it for other devices.
 
 ### CLIProxyAPI
+
+![agentctl cliproxy install and keys, then the dashboard: keys, logins with Claude's warning, the server menu](https://github.com/tnfssc/agentctl/releases/download/v1.6.0/cliproxy.gif)
 
 agentctl can also run a CLIProxyAPI server on this machine (CLIProxyAPI under Servers in the dashboard). It installs
 the newest GitHub release (checked against the release's checksums), runs it at login under launchd or `systemd
@@ -184,7 +194,7 @@ Tools are pinned in `mise.toml`.
 mise install
 mise run check     # vet, golangci-lint, race tests, build
 mise run install   # build into ~/.local/bin (or $AGENTCTL_INSTALL_DIR), like install.sh
-mise run demo      # re-record the demo GIF (VHS; needs ttyd and ffmpeg)
+mise run demo      # re-record the README GIFs (VHS; needs ttyd and ffmpeg); TAPES="t3 tune" for some
 ```
 
 ```

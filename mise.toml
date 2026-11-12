@@ -32,9 +32,13 @@ description = "Everything CI runs"
 depends = ["lint", "test", "build"]
 
 [tasks.demo]
-description = "Record the README demo GIF with VHS (needs ttyd and ffmpeg)"
+description = "Record the README GIFs with VHS (needs ttyd and ffmpeg); TAPES=name to record some"
 run = """
-. docs/demo/setup.sh /tmp/agentctl-demo
-trap 'kill $(cat /tmp/agentctl-demo/proxy.pid)' EXIT
-mise exec vhs@0.12.1 -- vhs docs/demo/demo.tape
+set -e
+for tape in ${TAPES:-demo cliproxy t3 opencode tune phone}; do
+  . docs/demo/setup.sh /tmp/agentctl-demo
+  trap 'kill $(cat /tmp/agentctl-demo/proxy.pid /tmp/agentctl-demo/cliproxy.pid 2>/dev/null) 2>/dev/null || true' EXIT
+  mise exec vhs@0.12.1 -- vhs docs/demo/$tape.tape
+  kill $(cat /tmp/agentctl-demo/proxy.pid /tmp/agentctl-demo/cliproxy.pid 2>/dev/null) 2>/dev/null || true
+done
 """
