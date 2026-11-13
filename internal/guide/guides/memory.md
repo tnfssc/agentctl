@@ -170,3 +170,20 @@ every shell or environment file you added the `PATH` line to, and anything you r
   database outgrew `MemoryMin` (or a parent's), so raise them all. `IOWeight` won't help on its own: it applies only
   under the `bfq` scheduler or with `io.cost` on (`/sys/block/<disk>/queue/scheduler`, `/sys/fs/cgroup/io.cost.qos`),
   and most NVMe setups have neither; enabling either is a system change that needs sudo and the user's OK.
+- T3 Code freezes for seconds and drops clients while it has its memory (`delayMaxMs` in
+  `userdata/logs/event-loop-stalls.ndjson`, few `majorPageFaults`; slow `COMMIT`s in its traces): its server runs
+  SQLite synchronously, so a slow commit stalls everything. On btrfs (`stat -fc %T` on T3 Code's `userdata`),
+  copy-on-write splits a database rewritten this often into hundreds of thousands of pieces (`filefrag` on
+  `statev2.sqlite`; tens is normal), and commits slow down with it. Offer to turn copy-on-write off for that
+  directory. Tell the user the cost first: btrfs no longer checksums or compresses those files, and stopping the
+  server interrupts running agent turns. Snapshots of the subvolume (snapper, btrbk, Timeshift) make the next write
+  after each one copy again, so with regular snapshots the gain wears off. With their OK:
+  1. Stop the server (`systemctl --user stop <unit>`) and check nothing still has the database open (`fuser`).
+  2. Back up `userdata` beside it with `cp -a --reflink=always` (no extra space until the files diverge).
+  3. `chattr +C` the directory. Files created there from then on inherit it; existing ones don't, so copy each
+     `*.sqlite*` file to a new name in the directory with `cp --reflink=never`, `cmp` it with the original, and
+     move it over the original.
+  4. `pragma quick_check` on the database, start the server, confirm it answers (`agentctl t3 status`), and
+     `filefrag` shows few pieces.
+  Add it to `<records>/memory.md` with the backup's path, and tell the user to delete the backup once T3 Code has
+  run fine for a few days.
