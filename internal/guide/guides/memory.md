@@ -172,18 +172,26 @@ every shell or environment file you added the `PATH` line to, and anything you r
   and most NVMe setups have neither; enabling either is a system change that needs sudo and the user's OK.
 - T3 Code freezes for seconds and drops clients while it has its memory (`delayMaxMs` in
   `userdata/logs/event-loop-stalls.ndjson`, few `majorPageFaults`; slow `COMMIT`s in its traces): its server runs
-  SQLite synchronously, so a slow commit stalls everything. On btrfs (`stat -fc %T` on T3 Code's `userdata`),
-  copy-on-write splits a database rewritten this often into hundreds of thousands of pieces (`filefrag` on
-  `statev2.sqlite`; tens is normal), and commits slow down with it. Offer to turn copy-on-write off for that
-  directory. Tell the user the cost first: btrfs no longer checksums or compresses those files, and stopping the
-  server interrupts running agent turns. Snapshots of the subvolume (snapper, btrbk, Timeshift) make the next write
-  after each one copy again, so with regular snapshots the gain wears off. With their OK:
-  1. Stop the server (`systemctl --user stop <unit>`) and check nothing still has the database open (`fuser`).
-  2. Back up `userdata` beside it with `cp -a --reflink=always` (no extra space until the files diverge).
+  SQLite synchronously, so a slow commit stalls everything. On btrfs (`stat -fc %T`), copy-on-write splits a
+  database rewritten all day into tiny pieces, and commits slow down with it. The same happens to OpenCode's
+  (`opencode.db*` in `$XDG_DATA_HOME/opencode`) and Codex's (`*.sqlite*` in `$CODEX_HOME`, else `~/.codex`); T3
+  Code's is `userdata/*.sqlite*`. Claude Code and Pi keep append-only JSONL, which stays in few pieces and
+  compresses well; leave those. Judge with `filefrag`: size divided by the piece count well under 128 KiB (the
+  largest piece btrfs makes of compressed data) means fragmented; T3 Code's 3.6 GB database had 531,355 pieces.
+  Offer to turn copy-on-write off for the fragmented ones' directories. Tell the user the cost first: btrfs no
+  longer checksums or compresses those files, and nothing may have them open meanwhile, so T3 Code's server,
+  OpenCode's server (`agentctl opencode stop`) and every Codex process (T3 Code runs some for its sessions) stop,
+  interrupting their turns. Snapshots of the subvolume (snapper, btrbk, Timeshift) make the next write after each
+  one copy again, so with regular snapshots the gain wears off. With their OK, per directory:
+  1. Stop what uses it (`systemctl --user stop <unit>` for T3 Code) and check with `fuser` that nothing has the
+     files open; check again right before replacing each one, since agents start on their own.
+  2. Back up the database files beside the directory with `cp -a --reflink=always` (no extra space until the
+     files diverge).
   3. `chattr +C` the directory. Files created there from then on inherit it; existing ones don't, so copy each
-     `*.sqlite*` file to a new name in the directory with `cp --reflink=never`, `cmp` it with the original, and
-     move it over the original.
-  4. `pragma quick_check` on the database, start the server, confirm it answers (`agentctl t3 status`), and
-     `filefrag` shows few pieces.
-  Add it to `<records>/memory.md` with the backup's path, and tell the user to delete the backup once T3 Code has
-  run fine for a few days.
+     database file to a new name in the directory with `cp --reflink=never`, `cmp` it with the original, and move
+     it over the original.
+  4. `pragma quick_check` on each database, start what you stopped, confirm it answers (`agentctl t3 status`,
+     `agentctl opencode status`), and `filefrag` shows far fewer pieces (a disk with scattered free space won't
+     get it to a handful).
+  Add it to `<records>/memory.md` with each directory and backup path, and tell the user to delete the backups once
+  everything has run fine for a few days.
